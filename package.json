@@ -1,0 +1,36 @@
+{
+  "name": "llm-relay",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon --exec tsx ./src/index.ts",
+    "run": "tsx ./src/index.ts",
+    "build": "rm -rf ./dist && tsc --build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BCsabaEngine/llm-relay.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/BCsabaEngine/llm-relay/issues"
+  },
+  "homepage": "https://github.com/BCsabaEngine/llm-relay#readme",
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.22.3",
+    "typescript": "~5.8.0"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.3",
+    "@hono/zod-validator": "^0.8.0",
+    "hono": "^4.12.21",
+    "openai": "^6.38.0",
+    "zod": "^4.4.3"
+  }
+}
