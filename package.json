@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "dev": "nodemon --exec tsx ./src/index.ts",
     "run": "tsx ./src/index.ts",
-    "build": "rm -rf ./dist && tsc --build",
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf ./dist && tsup src/index.ts --format esm --out-dir dist --no-splitting --dts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -23,10 +25,12 @@
   "devDependencies": {
     "@types/node": "^25.9.1",
     "nodemon": "^3.1.14",
+    "tsup": "^8.5.1",
     "tsx": "^4.22.3",
     "typescript": "~5.8.0"
   },
   "dependencies": {
+    "@andrewitsover/midnight": "^3.0.12",
     "@hono/node-server": "^2.0.3",
     "@hono/zod-validator": "^0.8.0",
     "hono": "^4.12.21",
