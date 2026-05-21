@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 
+import { config } from './config';
 import { database as database } from './db';
 import { app } from './hono';
 
@@ -8,7 +9,7 @@ const rows = database.prompt.many();
 
 serve({
   fetch: app.fetch,
-  port: 3000
+  port: config.http.port
 });
 
 for (const row of rows) console.dir(row, { depth: undefined });
