@@ -1,8 +1,6 @@
-import { Hono } from 'hono'
-import { health } from './health'
-import { prompt } from './prompt'
+import { Hono } from 'hono';
 
-export const app =
-    new Hono()
-        .route('/health', health)
-        .route('/prompt', prompt)
+import { health } from './health';
+import { prompt } from './prompt';
+
+export const app = new Hono().route('/health', health).route('/prompt', prompt);

@@ -1,8 +1,8 @@
-import { Hono } from 'hono'
+import { Hono } from 'hono';
 
 export const health = new Hono().get('/', (c) => {
-    return c.json({
-        success: true,
-        message: 'Service is alive',
-    })
-})
+  return c.json({
+    success: true,
+    message: 'Service is alive'
+  });
+});

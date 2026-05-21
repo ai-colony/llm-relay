@@ -1,70 +1,69 @@
-import { OpenAI } from 'openai'
-import { readFileSync } from 'fs'
-import { PDFParse } from 'pdf-parse'
+import { readFileSync } from 'node:fs';
+
+import { OpenAI } from 'openai';
+import { PDFParse } from 'pdf-parse';
+
 import type { LlamaChunk } from './types/llama.js';
 
 const openai = new OpenAI({ baseURL: 'http://localhost:8080/v1', apiKey: 'llama', timeout: 3000 });
 
 const chunkText = (text: string, maxChars = 6000): string[] => {
-    const chunks: string[] = []
-    let i = 0
-    while (i < text.length) {
-        const end = text.lastIndexOf('\n\n', i + maxChars)
-        const cutAt = end > i ? end : i + maxChars
-        chunks.push(text.slice(i, cutAt).trim())
-        i = cutAt
-    }
-    return chunks
-}
+  const chunks: string[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const end = text.lastIndexOf('\n\n', index + maxChars);
+    const cutAt = end > index ? end : index + maxChars;
+    chunks.push(text.slice(index, cutAt).trim());
+    index = cutAt;
+  }
+  return chunks;
+};
 
 const queryLLM = async (model: string, prompt: string) => {
-    const response = await openai.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-    });
-    let queryResponse = '';
-    for await (const choice of response.choices)
-        queryResponse += choice.message?.content || '';
-    return queryResponse;
-}
+  const response = await openai.chat.completions.create({
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0
+  });
+  let queryResponse = '';
+  for await (const choice of response.choices) queryResponse += choice.message?.content || '';
+  return queryResponse;
+};
 
 const startPdf = async () => {
-    const list = await openai.models.list();
-    const model = list.data[0]?.id;
-    if (!model)
-        return console.log('No models found');
-    console.log(`Using model: ${model}`);
+  const list = await openai.models.list();
+  const model = list.data[0]?.id;
+  if (!model) return console.log('No models found');
+  console.log(`Using model: ${model}`);
 
-    const fileContent = readFileSync('./4CWFVLVC92B.pdf', 'binary');
-    const pdfText = (await new PDFParse({ data: fileContent }).getText()).text;
+  const fileContent = readFileSync('./4CWFVLVC92B.pdf', 'binary');
+  const pdfText = (await new PDFParse({ data: fileContent }).getText()).text;
 
-    const pdfChunks = chunkText(pdfText, 3000)
-    console.log(`PDF split into ${pdfChunks.length} chunks.`);
+  const pdfChunks = chunkText(pdfText, 3000);
+  console.log(`PDF split into ${pdfChunks.length} chunks.`);
 
-    let fullResponse = '';
-    for (const chunk of pdfChunks) {
-        const prompt = `
+  let fullResponse = '';
+  for (const chunk of pdfChunks) {
+    const prompt = `
             Extract identifiers (dates, names, locations, etc) from the following PDF chunk:
 
             ${chunk}
             
-            Do not use formatting. Separate identifiers with new lines. Return empty string if no identifiers are found.`
-        const response = await queryLLM(model, prompt);
-        fullResponse += response + '\n';
-    }
+            Do not use formatting. Separate identifiers with new lines. Return empty string if no identifiers are found.`;
+    const response = await queryLLM(model, prompt);
+    fullResponse += response + '\n';
+  }
 
-    console.log(fullResponse);
+  console.log(fullResponse);
 };
 
 const startAnalyze = async () => {
-    const list = await openai.models.list();
-    const model = list.data[0]?.id;
-    if (!model)
-        return console.log('No models found');
-    console.log(`Using model: ${model}`);
+  const list = await openai.models.list();
+  const model = list.data[0]?.id;
+  if (!model) return console.log('No models found');
+  console.log(`Using model: ${model}`);
 
-    const prompt = `
+  const prompt = `
 Te egy belső kontrolling asszisztens vagy. Elemezd az alábbi adatokat és készíts
 strukturált jelentést magyar nyelven.
 
@@ -145,67 +144,63 @@ Adj rövid narratív értékelést is (2-3 mondat).
 - Számítások esetén mutasd a képletet is, ne csak az eredményt.
 - Kerüld a felesleges körítést, légy tömör és precíz.
 - Pénzösszegeket mindig Ft-ban, egész számra kerekítve adj meg.
-            `
-    const response = await openai.chat.completions.create({
-        model,
-        messages: [
-            { role: 'user', content: prompt }
-        ],
-        temperature: 0.1,
-        stream: true,
-    }) as unknown as AsyncIterable<LlamaChunk>
-    for await (const part of response) {
-        const delta = part.choices[0]?.delta
+            `;
+  const response = (await openai.chat.completions.create({
+    model,
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.1,
+    stream: true
+  })) as unknown as AsyncIterable<LlamaChunk>;
+  for await (const part of response) {
+    const delta = part.choices[0]?.delta;
 
-        const content = delta?.content ?? ''
-        const thinking = delta?.reasoning_content ?? ''
+    const content = delta?.content ?? '';
+    const thinking = delta?.reasoning_content ?? '';
 
-        if (thinking) process.stdout.write('T' + thinking)
-        if (content) process.stdout.write(content)
-    }
-    process.stdout.write('\n');
+    if (thinking) process.stdout.write('T' + thinking);
+    if (content) process.stdout.write(content);
+  }
+  process.stdout.write('\n');
 };
 
-
 const startSimple = async () => {
-    const list = await openai.models.list();
-    const model = list.data[0]?.id;
-    if (!model)
-        return console.log('No models found');
-    console.log(`Using model: ${model}`);
+  const list = await openai.models.list();
+  const model = list.data[0]?.id;
+  if (!model) return console.log('No models found');
+  console.log(`Using model: ${model}`);
 
-    const prompt = `Does Javascript and/or Typescript have types?`;
-    const response = await openai.chat.completions.create({
-        model,
-        messages: [
-            { role: 'system', content: 'You are a professional JavaScript and TypeScript developer.' },
-            { role: 'user', content: prompt }
-        ],
-        temperature: 0.5,
-        stream: true,
-    }) as unknown as AsyncIterable<LlamaChunk>
+  const prompt = `Does Javascript and/or Typescript have types?`;
+  const response = (await openai.chat.completions.create({
+    model,
+    messages: [
+      { role: 'system', content: 'You are a professional JavaScript and TypeScript developer.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.5,
+    stream: true
+  })) as unknown as AsyncIterable<LlamaChunk>;
 
-    let reasoningStarted = false;
-    let reasoningEnded = false;
-    for await (const part of response) {
-        const delta = part.choices[0]?.delta
+  let reasoningStarted = false;
+  let reasoningEnded = false;
+  for await (const part of response) {
+    const delta = part.choices[0]?.delta;
 
-        const content = delta?.content ?? ''
-        const reasoning = delta?.reasoning_content ?? ''
+    const content = delta?.content ?? '';
+    const reasoning = delta?.reasoning_content ?? '';
 
-        if (reasoningStarted && !reasoning && !reasoningEnded) {
-            process.stdout.write('!!!End of reasoning.\n\n\n');
-            reasoningEnded = true;
-        }
-        if (reasoning && !reasoningStarted) {
-            process.stdout.write('!!!Reasoning:\n');
-            reasoningStarted = true;
-        }
-
-        if (reasoning) process.stdout.write(reasoning)
-        if (content) process.stdout.write(content)
+    if (reasoningStarted && !reasoning && !reasoningEnded) {
+      process.stdout.write('!!!End of reasoning.\n\n\n');
+      reasoningEnded = true;
     }
-    process.stdout.write('\n');
+    if (reasoning && !reasoningStarted) {
+      process.stdout.write('!!!Reasoning:\n');
+      reasoningStarted = true;
+    }
+
+    if (reasoning) process.stdout.write(reasoning);
+    if (content) process.stdout.write(content);
+  }
+  process.stdout.write('\n');
 };
 
 //startAnalyze();

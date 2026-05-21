@@ -1,11 +1,11 @@
 import { Table } from '@andrewitsover/midnight';
 
-class Trees extends Table {
-    name = this.Text;
-    planted = this.DateTime();
-    alive = this.Bool;
+class Prompt extends Table {
+  name = this.Text;
+  planted = this.DateTime();
+  alive = this.Bool;
 }
 
 export const schema = {
-    Trees,
+  Prompt
 };
