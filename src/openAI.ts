@@ -4,7 +4,7 @@ import type { ChatCompletionChunk } from 'openai/resources';
 import { config } from './config';
 import { logger } from './logger';
 
-// Tyoes
+// Types
 type LlamaDelta = ChatCompletionChunk.Choice.Delta & {
   reasoning_content?: string;
 };
@@ -17,7 +17,28 @@ type LlamaChunk = Omit<ChatCompletionChunk, 'choices'> & {
   choices: LlamaChoice[];
 };
 
-// Function to execute OpenAI prompt and measure reasoning and response times
+const openai = new OpenAI({
+  baseURL: config.openai.url,
+  apiKey: config.openai.key,
+  timeout: config.openai.timeout
+});
+
+let resolvedModelPromise: Promise<string> | undefined;
+
+const resolveModel = (): Promise<string> => {
+  if (!resolvedModelPromise)
+    resolvedModelPromise = (async () => {
+      const requestedModel = config.openai.model;
+      const list = await openai.models.list();
+      const model = requestedModel ? list.data.find((m) => m.id === requestedModel)?.id : list.data[0]?.id;
+      if (!model) throw new Error('No models found' + (requestedModel ? ` with id ${requestedModel}` : ''));
+      logger.info(`[OpenAI] Using model: ${model}`);
+      return model;
+    })();
+
+  return resolvedModelPromise;
+};
+
 export const executeOpenAIPrompt = async (
   prompt: string | { system: string; user: string },
   temperature = 0.5
@@ -31,13 +52,7 @@ export const executeOpenAIPrompt = async (
     responseTokenPerSecond: number;
   };
 }> => {
-  const openai = new OpenAI({ baseURL: config.openai.url, apiKey: config.openai.key, timeout: config.openai.timeout });
-
-  const requestedtModel = config.openai.model;
-  const list = await openai.models.list();
-  const model = requestedtModel ? list.data.find((m) => m.id === requestedtModel)?.id : list.data[0]?.id;
-  if (!model) throw new Error('No models found' + (requestedtModel ? ` with id ${requestedtModel}` : ''));
-  logger.info(`[OpenAI] Using model: ${model}`);
+  const model = await resolveModel();
 
   logger.info(
     `[OpenAI] Sending prompt: ${typeof prompt === 'string' ? prompt.slice(0, 100) : `System: ${prompt.system.slice(0, 100)}\nUser: ${prompt.user.slice(0, 100)}`}`
@@ -71,12 +86,13 @@ export const executeOpenAIPrompt = async (
     const content = delta?.content ?? '';
     const reasoning_content = delta?.reasoning_content ?? '';
 
-    if (isReasoningStarted && !reasoning && !isReasoningEnded) {
+    if (isReasoningStarted && !isReasoningEnded && !reasoning_content) {
       isReasoningEnded = true;
       reasoningEndedAt = Date.now();
       responseStartedAt = Date.now();
     }
-    if (reasoning && !isReasoningStarted) {
+
+    if (!isReasoningStarted && reasoning_content) {
       isReasoningStarted = true;
       reasoningStartedAt = Date.now();
     }
