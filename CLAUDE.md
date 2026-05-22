@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Dev server with auto-reload and pretty-printed logs
 npm run dev-raw      # Dev server with auto-reload, raw logs
 npm run build        # Production build via tsup → /dist (ESM)
+npm start            # Run production build (requires npm run build first)
 npm run typecheck    # TypeScript type checking only (no emit)
 npm run lint:check   # ESLint check
 npm run lint:fix     # ESLint auto-fix
@@ -24,6 +25,8 @@ npm run drizzle:migrate  # Apply generated migrations
 
 No tests are implemented yet (`npm test` is a placeholder).
 
+**Runtime requirement**: Node.js 22+ (ESM, top-level `await`).
+
 ## Architecture
 
 `llm-relay` is an HTTP relay server for LLM requests. Clients POST prompts; the server queues them in SQLite, executes them against an OpenAI-compatible API (Llama), and optionally POSTs results back to a callback URL.
@@ -31,7 +34,11 @@ No tests are implemented yet (`npm test` is a placeholder).
 ### Layers
 
 **HTTP layer** — `src/hono/`  
-Hono-based REST API with Zod validation. Two routes: `GET /health` and `POST /prompt/add`. New routes go under `src/hono/`.
+Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `POST /prompt/add`, `GET /prompt/get`, `GET /prompt/list`, `DELETE /prompt/cancel`. New routes go under `src/hono/`.
+
+- `GET /health` checks both the SQLite database and the upstream OpenAI endpoint; returns `503` (not just a non-`ok` flag) if either fails.
+- `DELETE /prompt/cancel` **deletes** the record rather than marking it cancelled; it only succeeds for `queued`, `failed`, and `failed_retry` statuses — returns `409` if `in_progress` or already `completed`.
+- `GET /prompt/list` caps results at 500 records.
 
 **Business logic** — `src/prompt/`
 
@@ -49,7 +56,7 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 
 ### Key patterns
 
-- **Worker loop**: `src/index.ts` runs `setImmediate` to continuously call `processQueuedPrompts` then `processCallbackPendingPrompts`. Each tick processes one prompt at a time (FIFO).
+- **Worker loop**: `src/index.ts` uses `setImmediate` + a 100 ms `setTimeout` between iterations to call `processQueuedPrompts` then `processCallbackPendingPrompts`. Each tick processes one queued prompt and up to 50 pending callbacks (FIFO).
 - **Prompt state machine**: `queued` → `in_progress` → `completed | failed | failed_retry`. The `failed_retry` status is re-picked by the worker; `failed` is terminal.
 - **Async callback**: Each prompt can carry a `callbackUrl`; the relay POSTs the result there after completion. `callbackCompleted` tracks delivery separately from prompt completion.
 - **Streaming metrics**: `openAI.ts` detects the phase boundary between `reasoning_content` and `content` chunks to record separate timings and token rates.

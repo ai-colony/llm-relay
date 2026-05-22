@@ -4,5 +4,8 @@ import { config } from './config';
 
 export const logger = pino({
   name: 'llm-relay',
-  level: config.log.level
+  level: config.log.level,
+  serializers: {
+    error: pino.stdSerializers.err
+  }
 });
