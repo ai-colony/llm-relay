@@ -78,22 +78,22 @@ describe('processQueuedPrompts', () => {
     );
   });
 
-  it('marks the prompt as failed_retry on a transient error when retry count is below the limit', async () => {
+  it('marks the prompt as failed_retry on a transient error', async () => {
     vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
 
     await processQueuedPrompts();
 
-    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'fetch failed', true);
+    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'fetch failed', true, expect.any(Date));
   });
 
-  it('marks the prompt as permanently failed on a transient error when retry limit is reached', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 3 })]);
+  it('keeps retrying transient errors indefinitely (no retry limit)', async () => {
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 10 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('econnreset'));
 
     await processQueuedPrompts();
 
-    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'econnreset', false);
+    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'econnreset', true, expect.any(Date));
   });
 
   it('marks the prompt as permanently failed for non-transient errors regardless of retry count', async () => {
@@ -102,7 +102,7 @@ describe('processQueuedPrompts', () => {
 
     await processQueuedPrompts();
 
-    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'model not found', false);
+    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'model not found', false, undefined);
   });
 
   it('treats AbortError as transient', async () => {
@@ -113,7 +113,7 @@ describe('processQueuedPrompts', () => {
 
     await processQueuedPrompts();
 
-    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'aborted', true);
+    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'aborted', true, expect.any(Date));
   });
 });
 

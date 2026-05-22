@@ -9,7 +9,10 @@ import {
   updatePromptSetInProgress
 } from './repository';
 
-const MAX_RETRY_COUNT = 3;
+const computeNextRetryAt = (recentRetryCount: number): Date => {
+  const delayMs = Math.min(2 ** recentRetryCount * 1000, 60_000);
+  return new Date(Date.now() + delayMs);
+};
 
 const isTransientError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false;
@@ -21,7 +24,8 @@ const isTransientError = (error: unknown): boolean => {
     message.includes('econnrefused') ||
     message.includes('fetch failed') ||
     message.includes('network error') ||
-    message.includes('socket hang up')
+    message.includes('socket hang up') ||
+    isTransientError(error.cause)
   );
 };
 
@@ -81,8 +85,9 @@ export const processQueuedPrompts = async () => {
     logger.info(`Successfully processed prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const retryable = isTransientError(error) && firstQueuedPrompt.retryCount < MAX_RETRY_COUNT;
-    await updatePromptSetFailed(firstQueuedPrompt.id, errorMessage, retryable);
+    const retryable = isTransientError(error);
+    const nextRetryAt = retryable ? computeNextRetryAt(firstQueuedPrompt.retryCount + 1) : undefined;
+    await updatePromptSetFailed(firstQueuedPrompt.id, errorMessage, retryable, nextRetryAt);
     logger.error(
       { error, retryable, retryCount: firstQueuedPrompt.retryCount },
       `Failed to process prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`

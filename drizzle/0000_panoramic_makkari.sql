@@ -12,6 +12,7 @@ CREATE TABLE `prompts` (
 	`userPrompt` text NOT NULL,
 	`temperature` real NOT NULL,
 	`retryCount` integer NOT NULL,
+	`nextRetryAt` integer,
 	`reasoning` text,
 	`response` text,
 	`reasoningTimeMs` integer,

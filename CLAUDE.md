@@ -23,7 +23,10 @@ npm run drizzle:generate # Generate migration files
 npm run drizzle:migrate  # Apply generated migrations
 ```
 
-No tests are implemented yet (`npm test` is a placeholder).
+Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run test:coverage`.
+
+- `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repository`)
+- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests
 
 **Runtime requirement**: Node.js 22+ (ESM, top-level `await`).
 
@@ -57,7 +60,7 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 ### Key patterns
 
 - **Worker loop**: `src/index.ts` uses `setImmediate` + a 100 ms `setTimeout` between iterations to call `processQueuedPrompts` then `processCallbackPendingPrompts`. Each tick processes one queued prompt and up to 50 pending callbacks (FIFO).
-- **Prompt state machine**: `queued` → `in_progress` → `completed | failed | failed_retry`. The `failed_retry` status is re-picked by the worker; `failed` is terminal.
+- **Prompt state machine**: `queued` → `in_progress` → `completed | failed | failed_retry`. `failed_retry` is re-picked by the worker after an exponential backoff delay (`2^retryCount * 1s`, capped at 60 s) stored in `nextRetryAt`; there is no retry limit — transient errors retry indefinitely. `failed` is terminal (non-transient errors only).
 - **Async callback**: Each prompt can carry a `callbackUrl`; the relay POSTs the result there after completion. `callbackCompleted` tracks delivery separately from prompt completion.
 - **Streaming metrics**: `openAI.ts` detects the phase boundary between `reasoning_content` and `content` chunks to record separate timings and token rates.
 - **Model resolution**: `resolveModel()` in `openAI.ts` queries the upstream API once and caches the result; it selects by `OPENAI_MODEL` env var or falls back to the first available model.

@@ -144,7 +144,7 @@ queued → in_progress → completed
                      → failed_retry    (re-queued, up to 3 retries)
 ```
 
-Transient errors (network timeouts, connection resets) trigger `failed_retry`; the worker picks these up on the next tick. Hard failures go straight to `failed`.
+Transient errors (network timeouts, connection resets, `AbortError`, etc.) trigger `failed_retry` with an exponential backoff delay (`2^retryCount × 1 s`, capped at 60 s). There is no retry limit — transient errors are retried indefinitely. Hard failures (e.g. model not found) go straight to `failed`.
 
 On startup, any prompts stuck in `in_progress` from a previous unclean shutdown are automatically reset to `queued`.
 

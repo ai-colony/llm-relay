@@ -21,6 +21,7 @@ export const prompts = sqliteTable(
     temperature: real().notNull(),
 
     retryCount: integer().notNull(),
+    nextRetryAt: integer({ mode: 'timestamp' }),
 
     reasoning: text(),
     response: text(),

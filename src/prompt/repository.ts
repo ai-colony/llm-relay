@@ -1,6 +1,6 @@
 import { database } from '@db';
 import { type PromptStatus } from '@db/schema';
-import { and, count, eq, inArray, isNull, not, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, lte, not, or, sql } from 'drizzle-orm';
 
 const {
   dbClient,
@@ -40,7 +40,12 @@ export const findFirstQueuedPrompt = () =>
   dbClient
     .select()
     .from(prompts)
-    .where(inArray(prompts.status, ['queued', 'failed_retry']))
+    .where(
+      and(
+        inArray(prompts.status, ['queued', 'failed_retry']),
+        or(isNull(prompts.nextRetryAt), lte(prompts.nextRetryAt, new Date()))
+      )
+    )
     .orderBy(prompts.createdAt)
     .limit(1);
 
@@ -68,14 +73,14 @@ export const updatePromptSetCompleted = (
     })
     .where(eq(prompts.id, id));
 
-export const updatePromptSetFailed = (id: number, error: string, retryable: boolean) =>
+export const updatePromptSetFailed = (id: number, error: string, retryable: boolean, nextRetryAt?: Date) =>
   dbClient
     .update(prompts)
     .set({
       status: retryable ? 'failed_retry' : 'failed',
       statusError: error,
       completedAt: new Date(),
-      ...(retryable ? { retryCount: sql`${prompts.retryCount} + 1` } : {})
+      ...(retryable ? { retryCount: sql`${prompts.retryCount} + 1`, nextRetryAt } : {})
     })
     .where(eq(prompts.id, id));
 

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ede0b0df-f018-4bb7-8c1a-2522e07a7e0d",
+  "id": "26d37240-06ff-4bb0-9a12-bbfea16e1f77",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "prompts": {
@@ -96,6 +96,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "nextRetryAt": {
+          "name": "nextRetryAt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "reasoning": {

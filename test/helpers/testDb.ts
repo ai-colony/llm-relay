@@ -20,6 +20,7 @@ sqlite.exec(`
     userPrompt TEXT NOT NULL,
     temperature REAL NOT NULL,
     retryCount INTEGER NOT NULL,
+    nextRetryAt INTEGER,
     reasoning TEXT,
     response TEXT,
     reasoningTimeMs INTEGER,
