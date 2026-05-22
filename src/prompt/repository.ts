@@ -1,4 +1,5 @@
 import { database } from '@db';
+import { type PromptStatus } from '@db/schema';
 import { and, count, eq, inArray, isNull, not } from 'drizzle-orm';
 
 const {
@@ -84,6 +85,38 @@ export const findCallbackPendingPrompts = () =>
 
 export const updatePromptSetCallbackCompleted = (id: number) =>
   dbClient.update(prompts).set({ callbackCompleted: true }).where(eq(prompts.id, id));
+
+export const findPromptByClientNameAndRequestId = (clientName: string, requestId: number) =>
+  dbClient
+    .select()
+    .from(prompts)
+    .where(and(eq(prompts.clientName, clientName), eq(prompts.requestId, requestId)))
+    .limit(1);
+
+export const findPromptsByClientName = (clientName: string, status?: PromptStatus) =>
+  dbClient
+    .select({
+      requestId: prompts.requestId,
+      status: prompts.status,
+      createdAt: prompts.createdAt,
+      completedAt: prompts.completedAt
+    })
+    .from(prompts)
+    .where(
+      status ? and(eq(prompts.clientName, clientName), eq(prompts.status, status)) : eq(prompts.clientName, clientName)
+    )
+    .orderBy(prompts.createdAt);
+
+export const deletePromptByClientNameAndRequestId = (clientName: string, requestId: number) =>
+  dbClient
+    .delete(prompts)
+    .where(
+      and(
+        eq(prompts.clientName, clientName),
+        eq(prompts.requestId, requestId),
+        inArray(prompts.status, ['queued', 'failed', 'failed_retry'])
+      )
+    );
 
 export const getPromptStatusCounts = async () => {
   const [queuedRow] = await dbClient
