@@ -12,10 +12,8 @@ import {
 
 export const processCallbackPendingPrompts = async () => {
   const pendingPrompts = await findCallbackPendingPrompts();
-  if (pendingPrompts.length === 0) {
-    logger.debug('No pending prompts with callbacks to process');
-    return;
-  }
+  if (pendingPrompts.length === 0) return;
+
   for (const prompt of pendingPrompts)
     if (prompt.callbackUrl)
       try {
@@ -40,10 +38,7 @@ export const processCallbackPendingPrompts = async () => {
 
 export const processQueuedPrompts = async () => {
   const queuedPrompt = await findFirstQueuedPrompt();
-  if (queuedPrompt.length === 0) {
-    logger.debug('No queued prompts to process');
-    return;
-  }
+  if (queuedPrompt.length === 0) return;
 
   const firstQueuedPrompt = queuedPrompt[0]!;
 
