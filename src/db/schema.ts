@@ -1,0 +1,43 @@
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+
+export type PromptStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | 'failed_retry';
+
+export const prompts = sqliteTable(
+  'prompts',
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    clientName: text().notNull(),
+    requestId: integer().notNull(),
+    callbackUrl: text(),
+    callbackCompleted: integer({ mode: 'boolean' }).notNull(),
+
+    createdAt: integer({ mode: 'timestamp' }).notNull(),
+    status: text({ enum: ['queued', 'in_progress', 'completed', 'failed', 'failed_retry'] }).notNull(),
+    statusError: text(),
+    completedAt: integer({ mode: 'timestamp' }),
+
+    systemPrompt: text(),
+    userPrompt: text().notNull(),
+    temperature: real().notNull(),
+
+    retryCount: integer().notNull(),
+    nextRetryAt: integer({ mode: 'timestamp' }),
+
+    reasoning: text(),
+    response: text(),
+    reasoningTimeMs: integer(),
+    reasoningTokenPerSecond: integer(),
+    responseTimeMs: integer(),
+    responseTokenPerSecond: integer()
+  },
+  (t) => [
+    index('idx_prompts_status').on(t.status),
+    index('idx_prompts_callback').on(t.callbackCompleted, t.status),
+    index('idx_prompts_status_created').on(t.status, t.createdAt),
+    uniqueIndex('idx_prompts_client_request').on(t.clientName, t.requestId)
+  ]
+);
+
+export const schema = {
+  prompts
+};
