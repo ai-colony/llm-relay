@@ -111,12 +111,19 @@ export const executeOpenAIPrompt = async (
     reasoning,
     response,
     timing: {
-      reasoningTime: reasoningEndedAt && reasoningStartedAt ? (reasoningEndedAt - reasoningStartedAt) / 1000 : 0,
-      reasoningTokenPerSecond:
-        reasoningEndedAt && reasoningStartedAt ? reasoningToken / ((reasoningEndedAt - reasoningStartedAt) / 1000) : 0,
-      responseTime: responseEndedAt && responseStartedAt ? (responseEndedAt - responseStartedAt) / 1000 : 0,
+      reasoningTime: Math.round(
+        reasoningEndedAt && reasoningStartedAt ? (reasoningEndedAt - reasoningStartedAt) / 1000 : 0
+      ),
+      reasoningTokenPerSecond: Math.round(
+        reasoningEndedAt && reasoningStartedAt
+          ? Math.round(reasoningToken / ((reasoningEndedAt - reasoningStartedAt) / 1000))
+          : 0
+      ),
+      responseTime: Math.round(responseEndedAt && responseStartedAt ? (responseEndedAt - responseStartedAt) / 1000 : 0),
       responseTokenPerSecond:
-        responseEndedAt && responseStartedAt ? responseToken / ((responseEndedAt - responseStartedAt) / 1000) : 0
+        responseEndedAt && responseStartedAt
+          ? Math.round(responseToken / ((responseEndedAt - responseStartedAt) / 1000))
+          : 0
     }
   };
 };

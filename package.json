@@ -16,7 +16,8 @@
     "lint:check": "eslint .",
     "lint:fix": "eslint . --fix",
     "fix": "npm run format:fix && npm run lint:fix && npm run format:fix",
-    "all": "npm run fix && npm run typecheck && npm run build && npm run test"
+    "all": "npm run fix && npm run typecheck && npm run build && npm run test",
+    "npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i"
   },
   "repository": {
     "type": "git",
@@ -47,14 +48,14 @@
     "typescript": "~5.8.0"
   },
   "dependencies": {
-    "@andrewitsover/midnight": "^3.0.12",
+    "@andrewitsover/midnight": "^3.0.16",
     "@hono/node-server": "^2.0.3",
     "@hono/structured-logger": "^0.1.0",
     "@hono/zod-validator": "^0.8.0",
     "dotenv": "^17.4.2",
     "env-var": "^7.5.0",
     "hono": "^4.12.21",
-    "openai": "^6.38.0",
+    "openai": "^6.39.0",
     "pino": "^10.3.1",
     "zod": "^4.4.3"
   }
