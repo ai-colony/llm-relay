@@ -41,7 +41,6 @@ export const processQueuedPrompts = async () => {
   if (queuedPrompt.length === 0) return;
 
   const firstQueuedPrompt = queuedPrompt[0]!;
-
   try {
     await updatePromptSetInProgress(firstQueuedPrompt.id);
 
