@@ -1,32 +1,30 @@
-import { Table } from '@andrewitsover/midnight';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export type PromptStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | 'failed_retry';
-class Prompt extends Table {
-  clientName = this.Text;
-  requestId = this.Int;
-  callbackUrl = this.Null.Text;
-  callbackCompleted = this.Bool;
 
-  createdAt = this.Now.Instant;
-  status = this.Index(this.Text);
-  statusError = this.Null.Text;
-  completedAt = this.Null.Now;
+export const prompts = sqliteTable('prompts', {
+  id: integer().primaryKey({ autoIncrement: true }),
+  clientName: text().notNull(),
+  requestId: integer().notNull(),
+  callbackUrl: text(),
+  callbackCompleted: integer({ mode: 'boolean' }).notNull(),
 
-  systemPrompt = this.Null.Text;
-  userPrompt = this.Text;
+  createdAt: integer({ mode: 'timestamp' }).notNull(),
+  status: text({ enum: ['queued', 'in_progress', 'completed', 'failed', 'failed_retry'] }).notNull(),
+  statusError: text(),
+  completedAt: integer({ mode: 'timestamp' }),
 
-  reasoning = this.Null.Text;
-  response = this.Null.Text;
-  reasoningTime = this.Null.Int;
-  reasoningTokenPerSecond = this.Null.Int;
-  responseTime = this.Null.Int;
-  responseTokenPerSecond = this.Null.Int;
+  systemPrompt: text(),
+  userPrompt: text().notNull(),
 
-  Attributes = () => {
-    this.Unique(this.requestId, this.clientName);
-  };
-}
+  reasoning: text(),
+  response: text(),
+  reasoningTime: integer(),
+  reasoningTokenPerSecond: integer(),
+  responseTime: integer(),
+  responseTokenPerSecond: integer()
+});
 
 export const schema = {
-  Prompt
+  prompts
 };

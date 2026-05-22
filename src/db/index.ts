@@ -1,12 +1,13 @@
-import { existsSync } from 'node:fs';
-
-import { Database } from '@andrewitsover/midnight';
 import { config } from '@lib';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
 
 import { schema } from './schema';
 
-const filename = config.database.filename;
-const databaseExistsAtStartup = existsSync(filename);
+const sqlite = new Database(config.database.filename);
+const client = drizzle({ client: sqlite, schema });
 
-export const database = new Database(filename).getClient(schema);
-database.migrate(database.diff(databaseExistsAtStartup ? database.getSchema() : []));
+export const database = {
+  dbClient: client,
+  dbSchema: schema
+};

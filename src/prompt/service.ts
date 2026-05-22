@@ -11,51 +11,54 @@ import {
 } from './repository';
 
 export const processCallbackPendingPrompts = async () => {
-  const pendingPrompts = findCallbackPendingPrompts();
+  const pendingPrompts = await findCallbackPendingPrompts();
   if (pendingPrompts.length === 0) {
     logger.debug('No pending prompts with callbacks to process');
     return;
   }
   for (const prompt of pendingPrompts)
-    try {
-      await fetch(prompt.callbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: prompt.clientName,
-          requestId: prompt.requestId,
-          reasoning: prompt.reasoning,
-          response: prompt.response
-        })
-      });
-      updatePromptSetCallbackCompleted(prompt.id);
-      logger.info(
-        `Successfully sent callback for prompt ${prompt.clientName}-${prompt.requestId} to ${prompt.callbackUrl}`
-      );
-    } catch (error) {
-      logger.error(`Failed to send callback for prompt ${prompt.id}: ${error}`);
-    }
+    if (prompt.callbackUrl)
+      try {
+        await fetch(prompt.callbackUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientName: prompt.clientName,
+            requestId: prompt.requestId,
+            reasoning: prompt.reasoning,
+            response: prompt.response
+          })
+        });
+        await updatePromptSetCallbackCompleted(prompt.id);
+        logger.info(
+          `Successfully sent callback for prompt ${prompt.clientName}-${prompt.requestId} to ${prompt.callbackUrl}`
+        );
+      } catch (error) {
+        logger.error(`Failed to send callback for prompt ${prompt.id}: ${error}`);
+      }
 };
 
 export const processQueuedPrompts = async () => {
-  const queuedPrompt = findFirstQueuedPrompt();
-  if (!queuedPrompt) {
+  const queuedPrompt = await findFirstQueuedPrompt();
+  if (queuedPrompt.length === 0) {
     logger.debug('No queued prompts to process');
     return;
   }
 
+  const firstQueuedPrompt = queuedPrompt[0]!;
+
   try {
-    updatePromptSetInProgress(queuedPrompt.id);
+    await updatePromptSetInProgress(firstQueuedPrompt.id);
 
     const {
       reasoning,
       response,
       timing: { reasoningTime, reasoningTokenPerSecond, responseTime, responseTokenPerSecond }
     } = await executeOpenAIPrompt(
-      { system: queuedPrompt.systemPrompt ?? undefined, user: queuedPrompt.userPrompt },
+      { system: firstQueuedPrompt.systemPrompt ?? undefined, user: firstQueuedPrompt.userPrompt },
       0.5
     );
-    updatePromptSetCompleted(queuedPrompt.id, {
+    await updatePromptSetCompleted(firstQueuedPrompt.id, {
       reasoning,
       response,
       reasoningTime,
@@ -63,10 +66,12 @@ export const processQueuedPrompts = async () => {
       responseTime,
       responseTokenPerSecond
     });
-    logger.info(`Successfully processed prompt ${queuedPrompt.clientName}-${queuedPrompt.requestId}`);
+    logger.info(`Successfully processed prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    updatePromptSetFailed(queuedPrompt.id, errorMessage, false);
-    logger.error(`Failed to process prompt ${queuedPrompt.clientName}-${queuedPrompt.requestId}: ${errorMessage}`);
+    await updatePromptSetFailed(firstQueuedPrompt.id, errorMessage, false);
+    logger.error(
+      `Failed to process prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}: ${errorMessage}`
+    );
   }
 };
