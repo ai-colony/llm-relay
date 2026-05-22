@@ -11,8 +11,20 @@ serve({
 logger.info(`Server running on port ${config.http.port}`);
 
 const workerThread = async () => {
-  await processQueuedPrompts();
-  await processCallbackPendingPrompts();
+  try {
+    await processQueuedPrompts();
+    await processCallbackPendingPrompts();
+  } catch (error) {
+    logger.error({ error }, 'Worker thread error');
+  }
+  await new Promise((r) => setTimeout(r, 100));
   setImmediate(workerThread);
 };
 setImmediate(workerThread);
+
+const shutdown = () => {
+  logger.info('Shutting down...');
+  process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

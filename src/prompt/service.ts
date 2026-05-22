@@ -1,5 +1,4 @@
-export { addPrompt as createPrompt } from './repository';
-import { executeOpenAIPrompt, logger } from '@lib';
+import { config, executeOpenAIPrompt, logger } from '@lib';
 
 import {
   findCallbackPendingPrompts,
@@ -10,6 +9,8 @@ import {
   updatePromptSetInProgress
 } from './repository';
 
+export { addPrompt as createPrompt } from './repository';
+
 export const processCallbackPendingPrompts = async () => {
   const pendingPrompts = await findCallbackPendingPrompts();
   if (pendingPrompts.length === 0) return;
@@ -18,6 +19,7 @@ export const processCallbackPendingPrompts = async () => {
     if (prompt.callbackUrl)
       try {
         await fetch(prompt.callbackUrl, {
+          signal: AbortSignal.timeout(10_000),
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -47,17 +49,17 @@ export const processQueuedPrompts = async () => {
     const {
       reasoning,
       response,
-      timing: { reasoningTime, reasoningTokenPerSecond, responseTime, responseTokenPerSecond }
+      timing: { reasoningTimeMs, reasoningTokenPerSecond, responseTimeMs, responseTokenPerSecond }
     } = await executeOpenAIPrompt(
       { system: firstQueuedPrompt.systemPrompt ?? undefined, user: firstQueuedPrompt.userPrompt },
-      0.5
+      config.openai.temperature
     );
     await updatePromptSetCompleted(firstQueuedPrompt.id, {
       reasoning,
       response,
-      reasoningTime,
+      reasoningTimeMs,
       reasoningTokenPerSecond,
-      responseTime,
+      responseTimeMs,
       responseTokenPerSecond
     });
     logger.info(`Successfully processed prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`);

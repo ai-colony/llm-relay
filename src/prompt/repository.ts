@@ -49,9 +49,9 @@ export const updatePromptSetCompleted = (
   data: {
     reasoning: string;
     response: string;
-    reasoningTime: number;
+    reasoningTimeMs: number;
     reasoningTokenPerSecond: number;
-    responseTime: number;
+    responseTimeMs: number;
     responseTokenPerSecond: number;
   }
 ) =>
@@ -68,7 +68,7 @@ export const updatePromptSetFailed = (id: number, error: string, retryable: bool
   dbClient
     .update(prompts)
     .set({
-      status: retryable ? 'failed' : 'failed_retry',
+      status: retryable ? 'failed_retry' : 'failed',
       statusError: error,
       completedAt: new Date()
     })
@@ -79,9 +79,8 @@ export const findCallbackPendingPrompts = () =>
   dbClient
     .select()
     .from(prompts)
-    .where(
-      and(eq(prompts.status, 'completed'), not(isNull(prompts.callbackUrl)), eq(prompts.callbackCompleted, false))
-    );
+    .where(and(eq(prompts.status, 'completed'), not(isNull(prompts.callbackUrl)), eq(prompts.callbackCompleted, false)))
+    .limit(50);
 
 export const updatePromptSetCallbackCompleted = (id: number) =>
   dbClient.update(prompts).set({ callbackCompleted: true }).where(eq(prompts.id, id));

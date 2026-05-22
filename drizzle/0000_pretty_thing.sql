@@ -12,8 +12,11 @@ CREATE TABLE `prompts` (
 	`userPrompt` text NOT NULL,
 	`reasoning` text,
 	`response` text,
-	`reasoningTime` integer,
+	`reasoningTimeMs` integer,
 	`reasoningTokenPerSecond` integer,
-	`responseTime` integer,
+	`responseTimeMs` integer,
 	`responseTokenPerSecond` integer
 );
+--> statement-breakpoint
+CREATE INDEX `idx_prompts_status` ON `prompts` (`status`);--> statement-breakpoint
+CREATE INDEX `idx_prompts_callback` ON `prompts` (`status`,`callbackCompleted`);

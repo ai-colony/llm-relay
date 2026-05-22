@@ -34,7 +34,10 @@ const resolveModel = (): Promise<string> => {
       if (!model) throw new Error('No models found' + (requestedModel ? ` with id ${requestedModel}` : ''));
       logger.info(`[OpenAI] Using model: ${model}`);
       return model;
-    })();
+    })().catch((error: unknown) => {
+      resolvedModelPromise = undefined;
+      throw error;
+    });
 
   return resolvedModelPromise;
 };
@@ -46,9 +49,9 @@ export const executeOpenAIPrompt = async (
   reasoning: string;
   response: string;
   timing: {
-    reasoningTime: number;
+    reasoningTimeMs: number;
     reasoningTokenPerSecond: number;
-    responseTime: number;
+    responseTimeMs: number;
     responseTokenPerSecond: number;
   };
 }> => {
@@ -107,23 +110,17 @@ export const executeOpenAIPrompt = async (
   }
   const responseEndedAt = Date.now();
 
+  const reasoningTimeMs = reasoningEndedAt && reasoningStartedAt ? reasoningEndedAt - reasoningStartedAt : 0;
+  const responseTimeMs = responseEndedAt && responseStartedAt ? responseEndedAt - responseStartedAt : 0;
+
   return {
     reasoning,
     response,
     timing: {
-      reasoningTime: Math.round(
-        reasoningEndedAt && reasoningStartedAt ? (reasoningEndedAt - reasoningStartedAt) / 1000 : 0
-      ),
-      reasoningTokenPerSecond: Math.round(
-        reasoningEndedAt && reasoningStartedAt
-          ? Math.round(reasoningToken / ((reasoningEndedAt - reasoningStartedAt) / 1000))
-          : 0
-      ),
-      responseTime: Math.round(responseEndedAt && responseStartedAt ? (responseEndedAt - responseStartedAt) / 1000 : 0),
-      responseTokenPerSecond:
-        responseEndedAt && responseStartedAt
-          ? Math.round(responseToken / ((responseEndedAt - responseStartedAt) / 1000))
-          : 0
+      reasoningTimeMs,
+      reasoningTokenPerSecond: reasoningTimeMs > 0 ? Math.round(reasoningToken / (reasoningTimeMs / 1000)) : 0,
+      responseTimeMs,
+      responseTokenPerSecond: responseTimeMs > 0 ? Math.round(responseToken / (responseTimeMs / 1000)) : 0
     }
   };
 };

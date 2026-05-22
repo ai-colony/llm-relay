@@ -17,6 +17,7 @@ export const config = {
     url: envVar.get('OPENAI_URL').default('http://localhost:8080/v1').asString(),
     model: envVar.get('OPENAI_MODEL').default('').asString(),
     key: envVar.get('OPENAI_KEY').default('none').asString(),
-    timeout: envVar.get('OPENAI_TIMEOUT').default(10_000).asInt()
+    timeout: envVar.get('OPENAI_TIMEOUT').default(10_000).asInt(),
+    temperature: envVar.get('OPENAI_TEMPERATURE').default(0.5).asFloat()
   }
 };
