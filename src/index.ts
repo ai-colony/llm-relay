@@ -1,8 +1,7 @@
 import { serve } from '@hono/node-server';
+import { config, logger } from '@lib';
 
 import { app } from './hono';
-import { config } from './lib/config';
-import { logger } from './lib/logger';
 
 serve({
   fetch: app.fetch,

@@ -1,6 +1,5 @@
 import { type MatchAnyKeywords } from '@andrewitsover/midnight';
-
-import { database } from '../db';
+import { database } from '@db';
 
 // Add new prompt to the database
 export const addPrompt = (prompt: {

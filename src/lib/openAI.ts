@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
 import type { ChatCompletionChunk } from 'openai/resources';
 
-import { logger } from '../lib/logger';
 import { config } from './config';
+import { logger } from './logger';
 
 // Types
 type LlamaDelta = ChatCompletionChunk.Choice.Delta & {

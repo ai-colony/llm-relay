@@ -29,7 +29,13 @@
     "allowJs": false,
     "typeRoots": ["./node_modules/@types"],
     "rootDir": "./src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "paths": {
+      "@lib": ["./src/lib"],
+      "@lib/*": ["./src/lib/*"],
+      "@db": ["./src/db"],
+      "@db/*": ["./src/db/*"]
+    }
   },
   "include": ["./src"],
   "exclude": ["test", "examples"]

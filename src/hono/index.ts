@@ -1,7 +1,7 @@
 import { structuredLogger } from '@hono/structured-logger';
+import { logger } from '@lib';
 import { Hono } from 'hono';
 
-import { logger } from '../lib/logger';
 import { health } from './health';
 import { prompt } from './prompt';
 
