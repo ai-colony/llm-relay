@@ -1,4 +1,4 @@
-import { config, executeOpenAIPrompt, logger } from '@lib';
+import { executeOpenAIPrompt, logger } from '@lib';
 
 import {
   findCallbackPendingPrompts,
@@ -52,7 +52,7 @@ export const processQueuedPrompts = async () => {
       timing: { reasoningTimeMs, reasoningTokenPerSecond, responseTimeMs, responseTokenPerSecond }
     } = await executeOpenAIPrompt(
       { system: firstQueuedPrompt.systemPrompt ?? undefined, user: firstQueuedPrompt.userPrompt },
-      config.openai.temperature
+      firstQueuedPrompt.temperature
     );
     await updatePromptSetCompleted(firstQueuedPrompt.id, {
       reasoning,

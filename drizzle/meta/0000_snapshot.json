@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e252cc48-6aa2-4907-8bf4-15cb2da1f77e",
+  "id": "2e9e38d9-b914-4eee-a6e8-d5e6e17f4144",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "prompts": {
@@ -84,6 +84,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "temperature": {
+          "name": "temperature",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "reasoning": {
           "name": "reasoning",
           "type": "text",
@@ -135,7 +142,7 @@
         },
         "idx_prompts_callback": {
           "name": "idx_prompts_callback",
-          "columns": ["status", "callbackCompleted"],
+          "columns": ["callbackCompleted", "status"],
           "isUnique": false
         }
       },

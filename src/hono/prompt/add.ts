@@ -10,7 +10,8 @@ const BodySchema = z.object({
   requestId: z.number().int().positive(),
   callbackUrl: z.string().url().optional(),
   systemPrompt: z.string().optional(),
-  userPrompt: z.string()
+  userPrompt: z.string(),
+  temperature: z.number().min(0).max(2)
 });
 
 const ResponseSchema = z.object({

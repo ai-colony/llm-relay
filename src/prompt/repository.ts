@@ -14,8 +14,9 @@ export const addPrompt = async (prompt: {
   callbackUrl?: string;
   systemPrompt?: string;
   userPrompt: string;
+  temperature: number;
 }) => {
-  const { clientName, requestId, callbackUrl, systemPrompt, userPrompt } = prompt;
+  const { clientName, requestId, callbackUrl, systemPrompt, userPrompt, temperature } = prompt;
   const result = await dbClient.insert(prompts).values({
     clientName,
     requestId,
@@ -27,7 +28,8 @@ export const addPrompt = async (prompt: {
     status: 'queued',
 
     systemPrompt,
-    userPrompt
+    userPrompt,
+    temperature
   });
   return result.lastInsertRowid;
 };

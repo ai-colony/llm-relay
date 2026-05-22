@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export type PromptStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | 'failed_retry';
 
@@ -18,6 +18,7 @@ export const prompts = sqliteTable(
 
     systemPrompt: text(),
     userPrompt: text().notNull(),
+    temperature: real().notNull(),
 
     reasoning: text(),
     response: text(),
