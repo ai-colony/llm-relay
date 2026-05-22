@@ -4,8 +4,10 @@ import { Hono } from 'hono';
 
 import { health } from './health';
 import { prompt } from './prompt';
+import { status } from './status';
 
 export const app = new Hono()
   .use(structuredLogger({ createLogger: () => logger }))
   .route('/health', health)
+  .route('/status', status)
   .route('/prompt', prompt);

@@ -42,6 +42,18 @@ const resolveModel = (): Promise<string> => {
   return resolvedModelPromise;
 };
 
+export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const response = await fetch(`${config.openai.url}/models`, {
+      headers: { Authorization: `Bearer ${config.openai.key}` },
+      signal: AbortSignal.timeout(5000)
+    });
+    return response.ok ? { ok: true } : { ok: false, error: `HTTP ${response.status}` };
+  } catch (error) {
+    return { ok: false, error: String(error) };
+  }
+}
+
 export const executeOpenAIPrompt = async (
   prompt: { system: string | undefined; user: string },
   temperature: number

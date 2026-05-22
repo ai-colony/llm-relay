@@ -1,5 +1,5 @@
 import { database } from '@db';
-import { and, eq, inArray, isNull, not } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, not } from 'drizzle-orm';
 
 const {
   dbClient,
@@ -84,3 +84,31 @@ export const findCallbackPendingPrompts = () =>
 
 export const updatePromptSetCallbackCompleted = (id: number) =>
   dbClient.update(prompts).set({ callbackCompleted: true }).where(eq(prompts.id, id));
+
+export const getPromptStatusCounts = async () => {
+  const [queuedRow] = await dbClient
+    .select({ count: count() })
+    .from(prompts)
+    .where(inArray(prompts.status, ['queued', 'failed_retry']));
+
+  const [pendingRow] = await dbClient.select({ count: count() }).from(prompts).where(eq(prompts.status, 'in_progress'));
+
+  const [completedRow] = await dbClient.select({ count: count() }).from(prompts).where(eq(prompts.status, 'completed'));
+
+  const [failedRow] = await dbClient.select({ count: count() }).from(prompts).where(eq(prompts.status, 'failed'));
+
+  const [callbackPendingRow] = await dbClient
+    .select({ count: count() })
+    .from(prompts)
+    .where(
+      and(eq(prompts.status, 'completed'), not(isNull(prompts.callbackUrl)), eq(prompts.callbackCompleted, false))
+    );
+
+  return {
+    queued: queuedRow?.count ?? 0,
+    pending: pendingRow?.count ?? 0,
+    completed: completedRow?.count ?? 0,
+    failed: failedRow?.count ?? 0,
+    callbackPending: callbackPendingRow?.count ?? 0
+  };
+};
