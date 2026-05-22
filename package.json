@@ -9,14 +9,14 @@
     "dev-raw": "nodemon --exec tsx ./src/index.ts",
     "run": "tsx ./src/index.ts",
     "typecheck": "tsc --noEmit",
-    "build": "rm -rf ./dist && tsup src/index.ts --format esm --out-dir dist --no-splitting --dts",
+    "build": "tsup src/index.ts  --out-dir dist --format esm --clean --treeshake --no-splitting",
     "test": "echo \"No test specified yet\"",
     "format:check": "prettier --check .",
     "format:fix": "prettier --write . | grep -v 'unchanged' | sed G",
     "lint:check": "eslint .",
     "lint:fix": "eslint . --fix",
     "fix": "npm run format:fix && npm run lint:fix && npm run format:fix",
-    "all": "npm run fix && npm run build && npm run test"
+    "all": "npm run fix && npm run typecheck && npm run build && npm run test"
   },
   "repository": {
     "type": "git",

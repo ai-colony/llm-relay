@@ -40,8 +40,8 @@ const resolveModel = (): Promise<string> => {
 };
 
 export const executeOpenAIPrompt = async (
-  prompt: string | { system: string; user: string },
-  temperature = 0.5
+  prompt: { system: string | undefined; user: string },
+  temperature: number
 ): Promise<{
   reasoning: string;
   response: string;
@@ -55,17 +55,16 @@ export const executeOpenAIPrompt = async (
   const model = await resolveModel();
 
   logger.info(
-    `[OpenAI] Sending prompt: ${typeof prompt === 'string' ? prompt.slice(0, 100) : `System: ${prompt.system.slice(0, 100)}\nUser: ${prompt.user.slice(0, 100)}`}`
+    `[OpenAI] Sending prompt: System: ${prompt.system?.slice(0, 100)}... User: ${prompt.user.slice(0, 100)}...`
   );
   const completion = (await openai.chat.completions.create({
     model,
-    messages:
-      typeof prompt === 'string'
-        ? [{ role: 'user', content: prompt }]
-        : [
-            { role: 'system', content: prompt.system },
-            { role: 'user', content: prompt.user }
-          ],
+    messages: prompt.system
+      ? [
+          { role: 'system', content: prompt.system },
+          { role: 'user', content: prompt.user }
+        ]
+      : [{ role: 'user', content: prompt.user }],
     temperature,
     stream: true
   })) as unknown as AsyncIterable<LlamaChunk>;
