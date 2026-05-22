@@ -65,7 +65,10 @@ export default [
   {
     files: ['test/**/*.ts'],
     rules: {
-      '@typescript-eslint/no-shadow': 'off'
+      '@typescript-eslint/no-shadow': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      'unicorn/no-null': 'off',
+      'unicorn/prevent-abbreviations': 'off'
     }
   },
   {

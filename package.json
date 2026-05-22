@@ -11,7 +11,9 @@
     "run": "tsx ./src/index.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsup src/index.ts  --out-dir dist --format esm --clean --treeshake --no-splitting",
-    "test": "echo \"No test specified yet\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "format:check": "prettier --check .",
     "format:fix": "prettier --write . | grep -v 'unchanged' | sed G",
     "lint:check": "eslint .",
@@ -19,7 +21,6 @@
     "fix": "npm run format:fix && npm run lint:fix && npm run format:fix",
     "all": "npm run fix && npm run typecheck && npm run build && npm run test",
     "npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i",
-    "drizzle:push": "npx drizzle-kit push",
     "drizzle:generate": "npx drizzle-kit generate",
     "drizzle:migrate": "npx drizzle-kit migrate"
   },
@@ -40,6 +41,7 @@
     "@types/node": "^25.9.1",
     "@typescript-eslint/eslint-plugin": "^8.59.4",
     "@typescript-eslint/parser": "^8.59.4",
+    "@vitest/coverage-v8": "^4.1.7",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
@@ -51,7 +53,9 @@
     "prettier": "^3.8.3",
     "tsup": "^8.5.1",
     "tsx": "^4.22.3",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.7"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.3",
