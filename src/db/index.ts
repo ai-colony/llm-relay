@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 
 import { Database } from '@andrewitsover/midnight';
 
-import { config } from '../config';
+import { config } from '../lib/config';
 import { schema } from './schema';
 
 const filename = config.database.filename;
