@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2e9e38d9-b914-4eee-a6e8-d5e6e17f4144",
+  "id": "ede0b0df-f018-4bb7-8c1a-2522e07a7e0d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "prompts": {
@@ -91,6 +91,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "retryCount": {
+          "name": "retryCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "reasoning": {
           "name": "reasoning",
           "type": "text",
@@ -144,6 +151,16 @@
           "name": "idx_prompts_callback",
           "columns": ["callbackCompleted", "status"],
           "isUnique": false
+        },
+        "idx_prompts_status_created": {
+          "name": "idx_prompts_status_created",
+          "columns": ["status", "createdAt"],
+          "isUnique": false
+        },
+        "idx_prompts_client_request": {
+          "name": "idx_prompts_client_request",
+          "columns": ["clientName", "requestId"],
+          "isUnique": true
         }
       },
       "foreignKeys": {},

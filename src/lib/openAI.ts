@@ -86,8 +86,8 @@ export const executeOpenAIPrompt = async (
 
   let reasoning = '';
   let response = '';
-  let reasoningToken = 0;
-  let responseToken = 0;
+  let reasoningChars = 0;
+  let responseChars = 0;
   let reasoningStartedAt = 0;
   let reasoningEndedAt = 0;
   let responseStartedAt = 0;
@@ -103,7 +103,6 @@ export const executeOpenAIPrompt = async (
     if (isReasoningStarted && !isReasoningEnded && !reasoning_content) {
       isReasoningEnded = true;
       reasoningEndedAt = Date.now();
-      responseStartedAt = Date.now();
     }
 
     if (!isReasoningStarted && reasoning_content) {
@@ -113,17 +112,21 @@ export const executeOpenAIPrompt = async (
 
     if (reasoning_content) {
       reasoning += reasoning_content;
-      reasoningToken++;
+      reasoningChars += reasoning_content.length;
     }
     if (content) {
+      if (!responseStartedAt) responseStartedAt = Date.now();
       response += content;
-      responseToken++;
+      responseChars += content.length;
     }
   }
   const responseEndedAt = Date.now();
 
   const reasoningTimeMs = reasoningEndedAt && reasoningStartedAt ? reasoningEndedAt - reasoningStartedAt : 0;
-  const responseTimeMs = responseEndedAt && responseStartedAt ? responseEndedAt - responseStartedAt : 0;
+  const responseTimeMs = responseStartedAt ? responseEndedAt - responseStartedAt : 0;
+  // chars/4 is a standard approximation for token count
+  const reasoningToken = Math.round(reasoningChars / 4);
+  const responseToken = Math.round(responseChars / 4);
 
   return {
     reasoning,

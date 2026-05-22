@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export type PromptStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | 'failed_retry';
 
@@ -20,6 +20,8 @@ export const prompts = sqliteTable(
     userPrompt: text().notNull(),
     temperature: real().notNull(),
 
+    retryCount: integer().notNull(),
+
     reasoning: text(),
     response: text(),
     reasoningTimeMs: integer(),
@@ -27,7 +29,12 @@ export const prompts = sqliteTable(
     responseTimeMs: integer(),
     responseTokenPerSecond: integer()
   },
-  (t) => [index('idx_prompts_status').on(t.status), index('idx_prompts_callback').on(t.callbackCompleted, t.status)]
+  (t) => [
+    index('idx_prompts_status').on(t.status),
+    index('idx_prompts_callback').on(t.callbackCompleted, t.status),
+    index('idx_prompts_status_created').on(t.status, t.createdAt),
+    uniqueIndex('idx_prompts_client_request').on(t.clientName, t.requestId)
+  ]
 );
 
 export const schema = {

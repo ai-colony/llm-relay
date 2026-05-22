@@ -6,11 +6,11 @@ import { getPromptStatusCounts } from '../../prompt/repository';
 import { createPrompt } from '../../prompt/service';
 
 const BodySchema = z.object({
-  clientName: z.string(),
+  clientName: z.string().min(1),
   requestId: z.number().int().positive(),
   callbackUrl: z.string().url().optional(),
   systemPrompt: z.string().optional(),
-  userPrompt: z.string(),
+  userPrompt: z.string().min(1),
   temperature: z.number().min(0).max(2)
 });
 
@@ -22,7 +22,13 @@ type ResponseSchema = z.infer<typeof ResponseSchema>;
 
 export const add = new Hono().post('/', zValidator('json', BodySchema), async (c) => {
   const data = c.req.valid('json');
-  await createPrompt(data);
+  try {
+    await createPrompt(data);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('UNIQUE constraint failed'))
+      return c.json({ success: false, error: 'A prompt with this clientName and requestId already exists' }, 409);
+    throw error;
+  }
   const counts = await getPromptStatusCounts();
   return c.json({ success: true, queued: counts.queued } satisfies ResponseSchema, 201);
 });

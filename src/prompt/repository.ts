@@ -1,6 +1,6 @@
 import { database } from '@db';
 import { type PromptStatus } from '@db/schema';
-import { and, count, eq, inArray, isNull, not } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, not, sql } from 'drizzle-orm';
 
 const {
   dbClient,
@@ -26,6 +26,7 @@ export const addPrompt = async (prompt: {
     callbackCompleted: false,
 
     status: 'queued',
+    retryCount: 0,
 
     systemPrompt,
     userPrompt,
@@ -73,7 +74,8 @@ export const updatePromptSetFailed = (id: number, error: string, retryable: bool
     .set({
       status: retryable ? 'failed_retry' : 'failed',
       statusError: error,
-      completedAt: new Date()
+      completedAt: new Date(),
+      ...(retryable ? { retryCount: sql`${prompts.retryCount} + 1` } : {})
     })
     .where(eq(prompts.id, id));
 
@@ -95,7 +97,7 @@ export const findPromptByClientNameAndRequestId = (clientName: string, requestId
     .where(and(eq(prompts.clientName, clientName), eq(prompts.requestId, requestId)))
     .limit(1);
 
-export const findPromptsByClientName = (clientName: string, status?: PromptStatus) =>
+export const findPromptsByClientName = (clientName: string, status?: PromptStatus, limit = 500) =>
   dbClient
     .select({
       requestId: prompts.requestId,
@@ -107,7 +109,8 @@ export const findPromptsByClientName = (clientName: string, status?: PromptStatu
     .where(
       status ? and(eq(prompts.clientName, clientName), eq(prompts.status, status)) : eq(prompts.clientName, clientName)
     )
-    .orderBy(prompts.createdAt);
+    .orderBy(prompts.createdAt)
+    .limit(limit);
 
 export const deletePromptByClientNameAndRequestId = (clientName: string, requestId: number) =>
   dbClient
@@ -120,17 +123,14 @@ export const deletePromptByClientNameAndRequestId = (clientName: string, request
       )
     );
 
+export const resetInProgressPrompts = () =>
+  dbClient.update(prompts).set({ status: 'queued' }).where(eq(prompts.status, 'in_progress'));
+
 export const getPromptStatusCounts = async () => {
-  const [queuedRow] = await dbClient
-    .select({ count: count() })
+  const statusRows = await dbClient
+    .select({ status: prompts.status, count: count() })
     .from(prompts)
-    .where(inArray(prompts.status, ['queued', 'failed_retry']));
-
-  const [pendingRow] = await dbClient.select({ count: count() }).from(prompts).where(eq(prompts.status, 'in_progress'));
-
-  const [completedRow] = await dbClient.select({ count: count() }).from(prompts).where(eq(prompts.status, 'completed'));
-
-  const [failedRow] = await dbClient.select({ count: count() }).from(prompts).where(eq(prompts.status, 'failed'));
+    .groupBy(prompts.status);
 
   const [callbackPendingRow] = await dbClient
     .select({ count: count() })
@@ -139,11 +139,13 @@ export const getPromptStatusCounts = async () => {
       and(eq(prompts.status, 'completed'), not(isNull(prompts.callbackUrl)), eq(prompts.callbackCompleted, false))
     );
 
+  const statusMap = Object.fromEntries(statusRows.map((r) => [r.status, r.count]));
+
   return {
-    queued: queuedRow?.count ?? 0,
-    pending: pendingRow?.count ?? 0,
-    completed: completedRow?.count ?? 0,
-    failed: failedRow?.count ?? 0,
+    queued: (statusMap['queued'] ?? 0) + (statusMap['failed_retry'] ?? 0),
+    pending: statusMap['in_progress'] ?? 0,
+    completed: statusMap['completed'] ?? 0,
+    failed: statusMap['failed'] ?? 0,
     callbackPending: callbackPendingRow?.count ?? 0
   };
 };

@@ -7,6 +7,10 @@ import { prompt } from './prompt';
 import { status } from './status';
 
 export const app = new Hono()
+  .onError((error, c) => {
+    logger.error({ error }, 'Unhandled route error');
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  })
   .use(structuredLogger({ createLogger: () => logger }))
   .route('/health', health)
   .route('/status', status)

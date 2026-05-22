@@ -11,6 +11,7 @@ CREATE TABLE `prompts` (
 	`systemPrompt` text,
 	`userPrompt` text NOT NULL,
 	`temperature` real NOT NULL,
+	`retryCount` integer NOT NULL,
 	`reasoning` text,
 	`response` text,
 	`reasoningTimeMs` integer,
@@ -20,4 +21,6 @@ CREATE TABLE `prompts` (
 );
 --> statement-breakpoint
 CREATE INDEX `idx_prompts_status` ON `prompts` (`status`);--> statement-breakpoint
-CREATE INDEX `idx_prompts_callback` ON `prompts` (`callbackCompleted`,`status`);
+CREATE INDEX `idx_prompts_callback` ON `prompts` (`callbackCompleted`,`status`);--> statement-breakpoint
+CREATE INDEX `idx_prompts_status_created` ON `prompts` (`status`,`createdAt`);--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_prompts_client_request` ON `prompts` (`clientName`,`requestId`);

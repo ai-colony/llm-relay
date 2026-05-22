@@ -9,6 +9,22 @@ import {
   updatePromptSetInProgress
 } from './repository';
 
+const MAX_RETRY_COUNT = 3;
+
+const isTransientError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    error.name === 'AbortError' ||
+    message.includes('econnreset') ||
+    message.includes('etimedout') ||
+    message.includes('econnrefused') ||
+    message.includes('fetch failed') ||
+    message.includes('network error') ||
+    message.includes('socket hang up')
+  );
+};
+
 export { addPrompt as createPrompt } from './repository';
 
 export const processCallbackPendingPrompts = async () => {
@@ -34,7 +50,7 @@ export const processCallbackPendingPrompts = async () => {
           `Successfully sent callback for prompt ${prompt.clientName}-${prompt.requestId} to ${prompt.callbackUrl}`
         );
       } catch (error) {
-        logger.error(`Failed to send callback for prompt ${prompt.id}: ${error}`);
+        logger.error({ error }, `Failed to send callback for prompt ${prompt.id}`);
       }
 };
 
@@ -65,9 +81,11 @@ export const processQueuedPrompts = async () => {
     logger.info(`Successfully processed prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    await updatePromptSetFailed(firstQueuedPrompt.id, errorMessage, false);
+    const retryable = isTransientError(error) && firstQueuedPrompt.retryCount < MAX_RETRY_COUNT;
+    await updatePromptSetFailed(firstQueuedPrompt.id, errorMessage, retryable);
     logger.error(
-      `Failed to process prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}: ${errorMessage}`
+      { error, retryable, retryCount: firstQueuedPrompt.retryCount },
+      `Failed to process prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`
     );
   }
 };
