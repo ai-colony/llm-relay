@@ -131,26 +131,30 @@ export const deletePromptByClientNameAndRequestId = (clientName: string, request
 export const resetInProgressPrompts = () =>
   dbClient.update(prompts).set({ status: 'queued' }).where(eq(prompts.status, 'in_progress'));
 
-export const getPromptStatusCounts = async () => {
-  const statusRows = await dbClient
-    .select({ status: prompts.status, count: count() })
-    .from(prompts)
-    .groupBy(prompts.status);
-
-  const [callbackPendingRow] = await dbClient
+export const countQueuedPrompts = async () => {
+  const [row] = await dbClient
     .select({ count: count() })
     .from(prompts)
-    .where(
-      and(eq(prompts.status, 'completed'), not(isNull(prompts.callbackUrl)), eq(prompts.callbackCompleted, false))
-    );
+    .where(inArray(prompts.status, ['queued', 'failed_retry']));
+  return row?.count ?? 0;
+};
 
-  const statusMap = Object.fromEntries(statusRows.map((r) => [r.status, r.count]));
+export const getPromptStatusCounts = async () => {
+  const [row] = await dbClient
+    .select({
+      queued: sql<number>`sum(case when ${prompts.status} in ('queued','failed_retry') then 1 else 0 end)`,
+      pending: sql<number>`sum(case when ${prompts.status} = 'in_progress' then 1 else 0 end)`,
+      completed: sql<number>`sum(case when ${prompts.status} = 'completed' then 1 else 0 end)`,
+      failed: sql<number>`sum(case when ${prompts.status} = 'failed' then 1 else 0 end)`,
+      callbackPending: sql<number>`sum(case when ${prompts.status} = 'completed' and ${prompts.callbackUrl} is not null and ${prompts.callbackCompleted} = 0 then 1 else 0 end)`
+    })
+    .from(prompts);
 
   return {
-    queued: (statusMap['queued'] ?? 0) + (statusMap['failed_retry'] ?? 0),
-    pending: statusMap['in_progress'] ?? 0,
-    completed: statusMap['completed'] ?? 0,
-    failed: statusMap['failed'] ?? 0,
-    callbackPending: callbackPendingRow?.count ?? 0
+    queued: row?.queued ?? 0,
+    pending: row?.pending ?? 0,
+    completed: row?.completed ?? 0,
+    failed: row?.failed ?? 0,
+    callbackPending: row?.callbackPending ?? 0
   };
 };

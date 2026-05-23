@@ -21,7 +21,7 @@ CREATE TABLE `prompts` (
 	`responseTokenPerSecond` integer
 );
 --> statement-breakpoint
-CREATE INDEX `idx_prompts_status` ON `prompts` (`status`);--> statement-breakpoint
-CREATE INDEX `idx_prompts_callback` ON `prompts` (`callbackCompleted`,`status`);--> statement-breakpoint
+CREATE INDEX `idx_prompts_callback` ON `prompts` (`callbackCompleted`,`status`,`callbackUrl`);--> statement-breakpoint
 CREATE INDEX `idx_prompts_status_created` ON `prompts` (`status`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `idx_prompts_client_created` ON `prompts` (`clientName`,`createdAt`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_prompts_client_request` ON `prompts` (`clientName`,`requestId`);

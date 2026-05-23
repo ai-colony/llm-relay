@@ -2,7 +2,7 @@ import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { getPromptStatusCounts } from '../../prompt/repository';
+import { countQueuedPrompts } from '../../prompt/repository';
 import { createPrompt } from '../../prompt/service';
 
 const BodySchema = z.object({
@@ -29,6 +29,6 @@ export const add = new Hono().post('/', zValidator('json', BodySchema), async (c
       return c.json({ success: false, error: 'A prompt with this clientName and requestId already exists' }, 409);
     throw error;
   }
-  const counts = await getPromptStatusCounts();
-  return c.json({ success: true, queued: counts.queued } satisfies ResponseSchema, 201);
+  const queued = await countQueuedPrompts();
+  return c.json({ success: true, queued } satisfies ResponseSchema, 201);
 });

@@ -26,7 +26,7 @@ npm run drizzle:migrate  # Apply generated migrations
 Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run test:coverage`.
 
 - `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repository`)
-- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests
+- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests; mirrors all four production indexes
 
 **Runtime requirement**: Node.js 22+ (ESM, top-level `await`).
 
@@ -46,13 +46,13 @@ Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `
 **Business logic** — `src/prompt/`
 
 - `src/prompt/service.ts` — worker loop functions called by the `setImmediate` loop in `src/index.ts`; processes one queued prompt per tick and handles callback delivery.
-- `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle.
+- `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
 
 **Shared library** — `src/lib/` (aliased as `@lib`)
 
 - `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics.
 - `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`).
-- `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation.
+- `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 
 **Data layer** — `src/db/` (aliased as `@db`)  
 SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src/db/schema.ts`. Schema changes are **not** auto-applied — run `npm run drizzle:push` (dev) or generate+migrate (prod) after editing the schema.
@@ -62,7 +62,8 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 - **Worker loop**: `src/index.ts` uses `setImmediate` + a 100 ms `setTimeout` between iterations to call `processQueuedPrompts` then `processCallbackPendingPrompts`. Each tick processes one queued prompt and up to 50 pending callbacks (FIFO).
 - **Prompt state machine**: `queued` → `in_progress` → `completed | failed | failed_retry`. `failed_retry` is re-picked by the worker after an exponential backoff delay (`2^retryCount * 1s`, capped at 60 s) stored in `nextRetryAt`; there is no retry limit — transient errors retry indefinitely. `failed` is terminal (non-transient errors only).
 - **Async callback**: Each prompt can carry a `callbackUrl`; the relay POSTs the result there after completion. `callbackCompleted` tracks delivery separately from prompt completion.
-- **Streaming metrics**: `openAI.ts` detects the phase boundary between `reasoning_content` and `content` chunks to record separate timings and token rates.
+- **Streaming metrics**: `openAI.ts` detects the phase boundary between `reasoning_content` and `content` chunks to record separate timings and token rates. A `component: 'openai'` info log is emitted on completion with the full timing breakdown.
+- **Logging convention**: all log calls include a `component` field. `info`-level covers lifecycle events (prompt completed, callback sent, model resolved). `debug`-level adds per-request HTTP logs and prompt pick-up events — enable with `LOG_LEVEL=debug`.
 - **Model resolution**: `resolveModel()` in `openAI.ts` queries the upstream API once and caches the result; it selects by `OPENAI_MODEL` env var or falls back to the first available model.
 
 ## Tooling notes
@@ -71,3 +72,15 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 - **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins.
 - **Build**: tsup targets ES2024, outputs ESM to `/dist`.
 - **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`).
+
+## Deployment (infra/)
+
+Service files for running the built app as a managed daemon:
+
+- `infra/llm-relay.service` — systemd unit for Linux; uses `EnvironmentFile=` to load `.env`, runs as a dedicated `llm-relay` system user, restarts on failure.
+- `infra/com.llm-relay.plist` — launchd daemon plist for macOS; calls `infra/start.sh` to source `.env` before starting, keeps the process alive automatically.
+- `infra/start.sh` — env-sourcing wrapper (`set -a; source .env; set +a`) used only by the launchd plist (systemd handles env natively).
+- `infra/update.sh` — cross-platform update script: `git pull && npm ci --omit=dev && npm run build`, then prints the platform-specific restart command.
+- `infra/llama-server.sh` — example command for starting a local llama.cpp server to back the relay.
+
+Both service files use `/opt/llm-relay` as a path placeholder. When installing, pipe through `sed "s|/opt/llm-relay|$(pwd)|g"` before writing to the system location — see the README "Production deployment" section for the exact commands.

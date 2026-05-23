@@ -51,10 +51,25 @@ export const processCallbackPendingPrompts = async () => {
         });
         await updatePromptSetCallbackCompleted(prompt.id);
         logger.info(
-          `Successfully sent callback for prompt ${prompt.clientName}-${prompt.requestId} to ${prompt.callbackUrl}`
+          {
+            component: 'callback',
+            clientName: prompt.clientName,
+            requestId: prompt.requestId,
+            callbackUrl: prompt.callbackUrl
+          },
+          'Callback sent'
         );
       } catch (error) {
-        logger.error({ error }, `Failed to send callback for prompt ${prompt.id}`);
+        logger.error(
+          {
+            component: 'callback',
+            error,
+            clientName: prompt.clientName,
+            requestId: prompt.requestId,
+            callbackUrl: prompt.callbackUrl
+          },
+          'Callback failed'
+        );
       }
 };
 
@@ -65,6 +80,10 @@ export const processQueuedPrompts = async () => {
   const firstQueuedPrompt = queuedPrompt[0]!;
   try {
     await updatePromptSetInProgress(firstQueuedPrompt.id);
+    logger.debug(
+      { component: 'worker', clientName: firstQueuedPrompt.clientName, requestId: firstQueuedPrompt.requestId },
+      'Prompt picked up'
+    );
 
     const {
       reasoning,
@@ -82,15 +101,25 @@ export const processQueuedPrompts = async () => {
       responseTimeMs,
       responseTokenPerSecond
     });
-    logger.info(`Successfully processed prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`);
+    logger.info(
+      { component: 'worker', clientName: firstQueuedPrompt.clientName, requestId: firstQueuedPrompt.requestId },
+      'Prompt completed'
+    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const retryable = isTransientError(error);
     const nextRetryAt = retryable ? computeNextRetryAt(firstQueuedPrompt.retryCount + 1) : undefined;
     await updatePromptSetFailed(firstQueuedPrompt.id, errorMessage, retryable, nextRetryAt);
     logger.error(
-      { error, retryable, retryCount: firstQueuedPrompt.retryCount },
-      `Failed to process prompt ${firstQueuedPrompt.clientName}-${firstQueuedPrompt.requestId}`
+      {
+        component: 'worker',
+        error,
+        clientName: firstQueuedPrompt.clientName,
+        requestId: firstQueuedPrompt.requestId,
+        retryable,
+        retryCount: firstQueuedPrompt.retryCount
+      },
+      'Prompt failed'
     );
   }
 };
