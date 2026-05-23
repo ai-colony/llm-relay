@@ -26,7 +26,7 @@ npm run drizzle:migrate  # Apply generated migrations
 Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run test:coverage`.
 
 - `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repository`)
-- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests
+- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests; mirrors all four production indexes
 
 **Runtime requirement**: Node.js 22+ (ESM, top-level `await`).
 
@@ -46,7 +46,7 @@ Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `
 **Business logic** — `src/prompt/`
 
 - `src/prompt/service.ts` — worker loop functions called by the `setImmediate` loop in `src/index.ts`; processes one queued prompt per tick and handles callback delivery.
-- `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle.
+- `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
 
 **Shared library** — `src/lib/` (aliased as `@lib`)
 

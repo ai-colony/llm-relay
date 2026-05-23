@@ -105,7 +105,7 @@ All requests and responses use JSON.
 
 ### `GET /health`
 
-Returns `200 OK` when the server is up.
+Returns `200 OK` when both the SQLite database and the upstream OpenAI endpoint are reachable. Returns `503` if either check fails, with a `checks` object describing which component is down.
 
 ### `GET /status`
 
@@ -293,7 +293,7 @@ type ListPromptsResponse = z.infer<typeof ListPromptsResponse>;
 
 ### `DELETE /prompt/cancel?clientName=&requestId=`
 
-Cancel a queued or retrying prompt. Returns `409` if the prompt is `in_progress` or already `completed`.
+Cancel and **delete** a prompt. Only succeeds for `queued`, `failed`, and `failed_retry` statuses — returns `409` if the prompt is `in_progress` or already `completed`.
 
 ```typescript
 import { z } from 'zod';
@@ -335,7 +335,7 @@ When a prompt with a `callbackUrl` completes, the relay POSTs the following payl
 }
 ```
 
-Callback delivery is tracked separately from prompt completion — a failed HTTP POST is logged and retried on the next worker tick.
+Callback delivery is tracked separately from prompt completion — a failed HTTP POST is logged and retried on the next worker tick (up to 50 callbacks per tick, FIFO order). There is no retry limit; failed deliveries are retried indefinitely.
 
 ```typescript
 import { z } from 'zod';
