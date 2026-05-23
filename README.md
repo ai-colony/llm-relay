@@ -373,3 +373,7 @@ curl -s 'http://localhost:3000/prompt/get?clientName=demo&requestId=1'
 # 3. Check server status
 curl -s http://localhost:3000/status
 ```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
