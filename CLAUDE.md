@@ -43,7 +43,7 @@ Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `
 - `DELETE /prompt/cancel` **deletes** the record rather than marking it cancelled; it only succeeds for `queued`, `failed`, and `failed_retry` statuses — returns `409` if `in_progress` or already `completed`.
 - `GET /prompt/list` caps results at 500 records.
 
-**Business logic** — `src/prompt/`
+**Business logic** — `src/prompt/` (aliased as `@prompt`)
 
 - `src/prompt/service.ts` — worker loop functions called by the `setImmediate` loop in `src/index.ts`; processes one queued prompt per tick and handles callback delivery.
 - `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
@@ -71,7 +71,7 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 - **Prettier**: single quotes, 120-char line width, no trailing commas.
 - **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins.
 - **Build**: tsup targets ES2024, outputs ESM to `/dist`.
-- **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`).
+- **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/`, `@prompt` → `src/prompt/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`). Use the alias when importing from a different folder; use relative imports (`./sibling`) within the same folder.
 
 ## Deployment (infra/)
 
