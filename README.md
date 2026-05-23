@@ -2,6 +2,14 @@
 
 An HTTP relay server that queues LLM prompts, executes them serially against any OpenAI-compatible API, and optionally delivers results to a callback URL.
 
+[Changelog](CHANGELOG.md)
+
+<p align="center">
+  <img src="llm-relay.png" alt="llm-relay" />
+</p>
+
+---
+
 ## Why
 
 Local or self-hosted LLMs (e.g. llama.cpp, Ollama, vLLM) typically handle only a few requests at a time. `llm-relay` sits in front of the model and serializes concurrent requests into a FIFO queue backed by SQLite, so callers never have to manage back-pressure themselves. Clients can either poll for results or receive them via a push callback.
@@ -404,7 +412,3 @@ curl -s 'http://localhost:3000/prompt/get?clientName=demo&requestId=1'
 # 3. Check server status
 curl -s http://localhost:3000/status
 ```
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md).
