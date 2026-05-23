@@ -315,7 +315,7 @@ type CancelPromptResponse = z.infer<typeof CancelPromptResponse>;
 ```
 queued → in_progress → completed
                      → failed          (terminal)
-                     → failed_retry    (re-queued, up to 3 retries)
+                     → failed_retry    (re-queued, retried indefinitely)
 ```
 
 Transient errors (network timeouts, connection resets, `AbortError`, etc.) trigger `failed_retry` with an exponential backoff delay (`2^retryCount × 1 s`, capped at 60 s). There is no retry limit — transient errors are retried indefinitely. Hard failures (e.g. model not found) go straight to `failed`.

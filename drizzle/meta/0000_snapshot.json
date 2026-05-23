@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "26d37240-06ff-4bb0-9a12-bbfea16e1f77",
+  "id": "eda1f4dc-18db-4fc5-9f02-f8467bf9bf32",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "prompts": {
@@ -149,19 +149,19 @@
         }
       },
       "indexes": {
-        "idx_prompts_status": {
-          "name": "idx_prompts_status",
-          "columns": ["status"],
-          "isUnique": false
-        },
         "idx_prompts_callback": {
           "name": "idx_prompts_callback",
-          "columns": ["callbackCompleted", "status"],
+          "columns": ["callbackCompleted", "status", "callbackUrl"],
           "isUnique": false
         },
         "idx_prompts_status_created": {
           "name": "idx_prompts_status_created",
           "columns": ["status", "createdAt"],
+          "isUnique": false
+        },
+        "idx_prompts_client_created": {
+          "name": "idx_prompts_client_created",
+          "columns": ["clientName", "createdAt"],
           "isUnique": false
         },
         "idx_prompts_client_request": {
