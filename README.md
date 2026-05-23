@@ -42,6 +42,34 @@ npm run build
 npm start
 ```
 
+## Logs
+
+`llm-relay` uses [Pino](https://github.com/pinojs/pino) structured JSON logging. Every log entry includes a `component` field:
+
+| `component` | Source                                                        |
+| ----------- | ------------------------------------------------------------- |
+| `server`    | Startup, shutdown, unhandled worker errors                    |
+| `http`      | Per-request logs from the Hono middleware (debug only)        |
+| `worker`    | Prompt lifecycle — picked up, completed, failed               |
+| `callback`  | Callback delivery — sent, failed                              |
+| `openai`    | Model resolution, prompt send, completion with timing metrics |
+
+At the default `info` level you see lifecycle events (one log per prompt through its lifecycle). Set `LOG_LEVEL=debug` to also get per-request HTTP logs and the prompt pick-up event.
+
+The `openai` completion log includes inference performance metrics useful for monitoring throughput:
+
+```json
+{
+  "component": "openai",
+  "model": "llama-3.2",
+  "reasoningTimeMs": 1240,
+  "reasoningTokenPerSecond": 48,
+  "responseTimeMs": 320,
+  "responseTokenPerSecond": 54,
+  "msg": "Prompt completed"
+}
+```
+
 ## Production deployment
 
 Service definition files for Linux (systemd) and macOS (launchd) live in `infra/`.

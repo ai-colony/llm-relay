@@ -9,12 +9,12 @@ const server = serve({
   fetch: app.fetch,
   port: config.http.port
 });
-logger.info({ port: config.http.port }, 'Server running');
+logger.info({ component: 'server', port: config.http.port }, 'Server running');
 
 // Reset any prompts stuck as in_progress from a previous unclean shutdown
 await resetInProgressPrompts();
 const startupCounts = await getPromptStatusCounts();
-logger.info(startupCounts, 'DB status on startup');
+logger.info({ component: 'server', ...startupCounts }, 'DB status on startup');
 
 let shuttingDown = false;
 
@@ -23,7 +23,7 @@ const workerThread = async () => {
     await processQueuedPrompts();
     await processCallbackPendingPrompts();
   } catch (error) {
-    logger.error({ error }, 'Worker thread error');
+    logger.error({ component: 'server', error }, 'Worker thread error');
   }
   if (!shuttingDown) {
     await new Promise((r) => setTimeout(r, 100));
@@ -34,10 +34,10 @@ setImmediate(workerThread);
 
 const shutdown = () => {
   if (shuttingDown) return;
-  logger.info('Shutting down...');
+  logger.info({ component: 'server' }, 'Shutting down...');
   shuttingDown = true;
   server.close(() => {
-    logger.info('Server closed');
+    logger.info({ component: 'server' }, 'Server closed');
     process.exit(0);
   });
 };
