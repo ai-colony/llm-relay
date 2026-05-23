@@ -9,7 +9,7 @@ const server = serve({
   fetch: app.fetch,
   port: config.http.port
 });
-logger.info(`Server running on port ${config.http.port}`);
+logger.info({ port: config.http.port }, 'Server running');
 
 // Reset any prompts stuck as in_progress from a previous unclean shutdown
 await resetInProgressPrompts();

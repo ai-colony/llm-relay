@@ -3,11 +3,11 @@ vi.mock('../../src/prompt/service', () => ({
 }));
 
 vi.mock('../../src/prompt/repository', () => ({
-  getPromptStatusCounts: vi.fn()
+  countQueuedPrompts: vi.fn()
 }));
 
 import { add } from '../../src/hono/prompt/add';
-import { getPromptStatusCounts } from '../../src/prompt/repository';
+import { countQueuedPrompts } from '../../src/prompt/repository';
 import { createPrompt } from '../../src/prompt/service';
 
 const validBody = { clientName: 'my-client', requestId: 1, userPrompt: 'hello', temperature: 0.7 };
@@ -21,13 +21,7 @@ const postJson = (body: unknown) =>
 
 describe('POST /prompt/add', () => {
   beforeEach(() => {
-    vi.mocked(getPromptStatusCounts).mockResolvedValue({
-      queued: 1,
-      pending: 0,
-      completed: 0,
-      failed: 0,
-      callbackPending: 0
-    });
+    vi.mocked(countQueuedPrompts).mockResolvedValue(1);
   });
 
   it('returns 201 with success true and queue count on valid input', async () => {

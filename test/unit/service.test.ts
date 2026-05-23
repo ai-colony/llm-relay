@@ -105,6 +105,15 @@ describe('processQueuedPrompts', () => {
     expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'model not found', false, undefined);
   });
 
+  it('converts a non-Error thrown value to a string for the failure message', async () => {
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt()]);
+    vi.mocked(executeOpenAIPrompt).mockRejectedValue('plain string error');
+
+    await processQueuedPrompts();
+
+    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'plain string error', false, undefined);
+  });
+
   it('treats AbortError as transient', async () => {
     const abortError = new Error('aborted');
     abortError.name = 'AbortError';
@@ -153,6 +162,18 @@ describe('processCallbackPendingPrompts', () => {
 
     await processCallbackPendingPrompts();
 
+    expect(updatePromptSetCallbackCompleted).not.toHaveBeenCalled();
+  });
+
+  it('skips prompts that have no callback URL', async () => {
+    const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: null });
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
+    const mockFetch = vi.fn();
+    vi.stubGlobal('fetch', mockFetch);
+
+    await processCallbackPendingPrompts();
+
+    expect(mockFetch).not.toHaveBeenCalled();
     expect(updatePromptSetCallbackCompleted).not.toHaveBeenCalled();
   });
 });

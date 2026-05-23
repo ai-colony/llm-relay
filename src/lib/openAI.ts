@@ -32,7 +32,7 @@ const resolveModel = (): Promise<string> => {
       const list = await openai.models.list();
       const model = requestedModel ? list.data.find((m) => m.id === requestedModel)?.id : list.data[0]?.id;
       if (!model) throw new Error('No models found' + (requestedModel ? ` with id ${requestedModel}` : ''));
-      logger.info(`[OpenAI] Using model: ${model}`);
+      logger.info({ model }, '[OpenAI] Using model');
       return model;
     })().catch((error: unknown) => {
       resolvedModelPromise = undefined;
@@ -69,9 +69,7 @@ export const executeOpenAIPrompt = async (
 }> => {
   const model = await resolveModel();
 
-  logger.info(
-    `[OpenAI] Sending prompt: System: ${prompt.system?.slice(0, 100)}... User: ${prompt.user.slice(0, 100)}...`
-  );
+  logger.info({ system: prompt.system?.slice(0, 100), user: prompt.user.slice(0, 100) }, '[OpenAI] Sending prompt');
   const completion = (await openai.chat.completions.create({
     model,
     messages: prompt.system

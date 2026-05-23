@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "run": "tsx ./src/index.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.ts  --out-dir dist --format esm --clean --treeshake --no-splitting",
+    "build": "tsup src/index.ts  --out-dir dist --format esm --clean --treeshake --no-splitting --minify",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

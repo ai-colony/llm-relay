@@ -30,6 +30,9 @@ sqlite.exec(`
   )
 `);
 sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_prompts_client_request ON prompts (clientName, requestId)');
+sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_callback ON prompts (callbackCompleted, status, callbackUrl)');
+sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_status_created ON prompts (status, createdAt)');
+sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_client_created ON prompts (clientName, createdAt)');
 
 export const testSqlite = sqlite;
 export const testDbClient = drizzle({ client: sqlite, schema });
