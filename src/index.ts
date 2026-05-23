@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server';
 import { config, logger } from '@lib';
 
 import { app } from './hono';
-import { resetInProgressPrompts } from './prompt/repository';
+import { getPromptStatusCounts, resetInProgressPrompts } from './prompt/repository';
 import { processCallbackPendingPrompts, processQueuedPrompts } from './prompt/service';
 
 const server = serve({
@@ -13,6 +13,8 @@ logger.info(`Server running on port ${config.http.port}`);
 
 // Reset any prompts stuck as in_progress from a previous unclean shutdown
 await resetInProgressPrompts();
+const startupCounts = await getPromptStatusCounts();
+logger.info(startupCounts, 'DB status on startup');
 
 let shuttingDown = false;
 
