@@ -71,3 +71,15 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 - **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins.
 - **Build**: tsup targets ES2024, outputs ESM to `/dist`.
 - **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`).
+
+## Deployment (infra/)
+
+Service files for running the built app as a managed daemon:
+
+- `infra/llm-relay.service` — systemd unit for Linux; uses `EnvironmentFile=` to load `.env`, runs as a dedicated `llm-relay` system user, restarts on failure.
+- `infra/com.llm-relay.plist` — launchd daemon plist for macOS; calls `infra/start.sh` to source `.env` before starting, keeps the process alive automatically.
+- `infra/start.sh` — env-sourcing wrapper (`set -a; source .env; set +a`) used only by the launchd plist (systemd handles env natively).
+- `infra/update.sh` — cross-platform update script: `git pull && npm ci --omit=dev && npm run build`, then prints the platform-specific restart command.
+- `infra/llama-server.sh` — example command for starting a local llama.cpp server to back the relay.
+
+Both service files use `/opt/llm-relay` as a path placeholder. When installing, pipe through `sed "s|/opt/llm-relay|$(pwd)|g"` before writing to the system location — see the README "Production deployment" section for the exact commands.
