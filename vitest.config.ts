@@ -6,7 +6,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@lib': path.resolve('src/lib'),
-      '@db': path.resolve('src/db')
+      '@db': path.resolve('src/db'),
+      '@prompt': path.resolve('src/prompt')
     }
   },
   test: {

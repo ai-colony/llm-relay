@@ -3,11 +3,17 @@ vi.mock('../../src/prompt/service', () => ({
 }));
 
 vi.mock('../../src/prompt/repository', () => ({
-  countQueuedPrompts: vi.fn()
+  countQueuedPrompts: vi.fn(),
+  findPromptByClientNameAndRequestId: vi.fn(),
+  deletePromptForOverwrite: vi.fn()
 }));
 
 import { add } from '../../src/hono/prompt/add';
-import { countQueuedPrompts } from '../../src/prompt/repository';
+import {
+  countQueuedPrompts,
+  deletePromptForOverwrite,
+  findPromptByClientNameAndRequestId
+} from '../../src/prompt/repository';
 import { createPrompt } from '../../src/prompt/service';
 
 const validBody = { clientName: 'my-client', requestId: 1, userPrompt: 'hello', temperature: 0.7 };
@@ -21,7 +27,10 @@ const postJson = (body: unknown) =>
 
 describe('POST /prompt/add', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(countQueuedPrompts).mockResolvedValue(1);
+    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([]);
+    vi.mocked(deletePromptForOverwrite).mockResolvedValue({ rowsAffected: 1 } as never);
   });
 
   it('returns 201 with success true and queue count on valid input', async () => {
@@ -66,5 +75,48 @@ describe('POST /prompt/add', () => {
       systemPrompt: 'be concise'
     });
     expect(response.status).toBe(201);
+  });
+
+  describe('overwrite=true', () => {
+    it('deletes existing queued prompt and returns 201', async () => {
+      vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([{ status: 'queued' } as never]);
+      vi.mocked(createPrompt).mockResolvedValue(1);
+      const response = await postJson({ ...validBody, overwrite: true });
+      expect(response.status).toBe(201);
+      expect(vi.mocked(deletePromptForOverwrite)).toHaveBeenCalledWith(validBody.clientName, validBody.requestId);
+    });
+
+    it('deletes existing completed prompt and returns 201', async () => {
+      vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([{ status: 'completed' } as never]);
+      vi.mocked(createPrompt).mockResolvedValue(1);
+      const response = await postJson({ ...validBody, overwrite: true });
+      expect(response.status).toBe(201);
+      expect(vi.mocked(deletePromptForOverwrite)).toHaveBeenCalledWith(validBody.clientName, validBody.requestId);
+    });
+
+    it('returns 409 when existing prompt is in_progress', async () => {
+      vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([{ status: 'in_progress' } as never]);
+      const response = await postJson({ ...validBody, overwrite: true });
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body.success).toBe(false);
+      expect(vi.mocked(deletePromptForOverwrite)).not.toHaveBeenCalled();
+    });
+
+    it('inserts normally when no existing prompt found', async () => {
+      vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([]);
+      vi.mocked(createPrompt).mockResolvedValue(1);
+      const response = await postJson({ ...validBody, overwrite: true });
+      expect(response.status).toBe(201);
+      expect(vi.mocked(deletePromptForOverwrite)).not.toHaveBeenCalled();
+    });
+
+    it('overwrite=false still returns 409 on UNIQUE conflict', async () => {
+      vi.mocked(createPrompt).mockRejectedValue(
+        new Error('UNIQUE constraint failed: prompts.clientName, prompts.requestId')
+      );
+      const response = await postJson({ ...validBody, overwrite: false });
+      expect(response.status).toBe(409);
+    });
   });
 });

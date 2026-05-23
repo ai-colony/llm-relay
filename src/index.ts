@@ -1,9 +1,9 @@
 import { serve } from '@hono/node-server';
 import { config, logger } from '@lib';
+import { getPromptStatusCounts, resetInProgressPrompts } from '@prompt/repository';
+import { processCallbackPendingPrompts, processQueuedPrompts } from '@prompt/service';
 
 import { app } from './hono';
-import { getPromptStatusCounts, resetInProgressPrompts } from './prompt/repository';
-import { processCallbackPendingPrompts, processQueuedPrompts } from './prompt/service';
 
 const server = serve({
   fetch: app.fetch,

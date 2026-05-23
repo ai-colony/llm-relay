@@ -1,8 +1,7 @@
 import { zValidator } from '@hono/zod-validator';
+import { findPromptByClientNameAndRequestId } from '@prompt/repository';
 import { Hono } from 'hono';
 import { z } from 'zod';
-
-import { findPromptByClientNameAndRequestId } from '../../prompt/repository';
 
 const QuerySchema = z.object({
   clientName: z.string(),

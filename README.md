@@ -141,7 +141,7 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "uptime": 42,
   "queued": 3,
   "pending": 1,
@@ -168,7 +168,7 @@ type StatusResponse = z.infer<typeof StatusResponse>;
 
 ### `POST /prompt/add`
 
-Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submitting the same pair returns `409`.
+Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submitting the same pair returns `409` unless `overwrite` is set to `true`.
 
 **Request body:**
 
@@ -179,18 +179,20 @@ Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submi
   "userPrompt": "What is the capital of France?",
   "systemPrompt": "You are a geography expert.",
   "temperature": 0.7,
-  "callbackUrl": "https://my-app.example.com/llm-callback"
+  "callbackUrl": "https://my-app.example.com/llm-callback",
+  "overwrite": false
 }
 ```
 
-| Field          | Type    | Required | Description                                              |
-| -------------- | ------- | -------- | -------------------------------------------------------- |
-| `clientName`   | string  | yes      | Logical client identifier; scopes `requestId` uniqueness |
-| `requestId`    | integer | yes      | Client-assigned ID, positive integer                     |
-| `userPrompt`   | string  | yes      | The user turn of the conversation                        |
-| `systemPrompt` | string  | no       | Optional system prompt                                   |
-| `temperature`  | float   | yes      | Sampling temperature, `0`–`2`                            |
-| `callbackUrl`  | URL     | no       | If provided, the relay POSTs the result here when done   |
+| Field          | Type    | Required | Description                                                                                                                                                                                                                                      |
+| -------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `clientName`   | string  | yes      | Logical client identifier; scopes `requestId` uniqueness                                                                                                                                                                                         |
+| `requestId`    | integer | yes      | Client-assigned ID, positive integer                                                                                                                                                                                                             |
+| `userPrompt`   | string  | yes      | The user turn of the conversation                                                                                                                                                                                                                |
+| `systemPrompt` | string  | no       | Optional system prompt                                                                                                                                                                                                                           |
+| `temperature`  | float   | yes      | Sampling temperature, `0`–`2`                                                                                                                                                                                                                    |
+| `callbackUrl`  | URL     | no       | If provided, the relay POSTs the result here when done                                                                                                                                                                                           |
+| `overwrite`    | boolean | no       | Default `false`. When `true`, deletes any existing prompt with the same `clientName + requestId` before adding. Only valid for statuses `queued`, `completed`, `failed`, `failed_retry` — returns `409` if the existing prompt is `in_progress`. |
 
 ```typescript
 import { z } from 'zod';
@@ -201,7 +203,8 @@ const AddPromptBody = z.object({
   userPrompt: z.string().min(1),
   systemPrompt: z.string().optional(),
   temperature: z.number().min(0).max(2),
-  callbackUrl: z.string().url().optional()
+  callbackUrl: z.string().url().optional(),
+  overwrite: z.boolean().optional().default(false)
 });
 type AddPromptBody = z.infer<typeof AddPromptBody>;
 ```

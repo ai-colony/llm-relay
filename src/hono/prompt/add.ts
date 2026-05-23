@@ -1,9 +1,8 @@
 import { zValidator } from '@hono/zod-validator';
+import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repository';
+import { createPrompt } from '@prompt/service';
 import { Hono } from 'hono';
 import { z } from 'zod';
-
-import { countQueuedPrompts } from '../../prompt/repository';
-import { createPrompt } from '../../prompt/service';
 
 const BodySchema = z.object({
   clientName: z.string().min(1),
@@ -11,7 +10,8 @@ const BodySchema = z.object({
   callbackUrl: z.string().url().optional(),
   systemPrompt: z.string().optional(),
   userPrompt: z.string().min(1),
-  temperature: z.number().min(0).max(2)
+  temperature: z.number().min(0).max(2),
+  overwrite: z.boolean().optional().default(false)
 });
 
 const ResponseSchema = z.object({
@@ -22,6 +22,16 @@ type ResponseSchema = z.infer<typeof ResponseSchema>;
 
 export const add = new Hono().post('/', zValidator('json', BodySchema), async (c) => {
   const data = c.req.valid('json');
+
+  if (data.overwrite) {
+    const [existing] = await findPromptByClientNameAndRequestId(data.clientName, data.requestId);
+    if (existing) {
+      if (existing.status === 'in_progress')
+        return c.json({ success: false, error: 'Cannot overwrite a prompt that is currently in progress' }, 409);
+      await deletePromptForOverwrite(data.clientName, data.requestId);
+    }
+  }
+
   try {
     await createPrompt(data);
   } catch (error) {

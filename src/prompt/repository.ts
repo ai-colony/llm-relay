@@ -128,6 +128,17 @@ export const deletePromptByClientNameAndRequestId = (clientName: string, request
       )
     );
 
+export const deletePromptForOverwrite = (clientName: string, requestId: number) =>
+  dbClient
+    .delete(prompts)
+    .where(
+      and(
+        eq(prompts.clientName, clientName),
+        eq(prompts.requestId, requestId),
+        inArray(prompts.status, ['queued', 'completed', 'failed', 'failed_retry'])
+      )
+    );
+
 export const resetInProgressPrompts = () =>
   dbClient.update(prompts).set({ status: 'queued' }).where(eq(prompts.status, 'in_progress'));
 
