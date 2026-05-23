@@ -1,13 +1,8 @@
 import { zValidator } from '@hono/zod-validator';
+import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repository';
+import { createPrompt } from '@prompt/service';
 import { Hono } from 'hono';
 import { z } from 'zod';
-
-import {
-  countQueuedPrompts,
-  deletePromptForOverwrite,
-  findPromptByClientNameAndRequestId
-} from '../../prompt/repository';
-import { createPrompt } from '../../prompt/service';
 
 const BodySchema = z.object({
   clientName: z.string().min(1),

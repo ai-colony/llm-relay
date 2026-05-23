@@ -34,7 +34,9 @@
       "@lib": ["./src/lib"],
       "@lib/*": ["./src/lib/*"],
       "@db": ["./src/db"],
-      "@db/*": ["./src/db/*"]
+      "@db/*": ["./src/db/*"],
+      "@prompt": ["./src/prompt"],
+      "@prompt/*": ["./src/prompt/*"]
     }
   },
   "include": ["./src"],
