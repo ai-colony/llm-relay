@@ -42,6 +42,63 @@ npm run build
 npm start
 ```
 
+## Production deployment
+
+Service definition files for Linux (systemd) and macOS (launchd) live in `infra/`.
+
+### Install
+
+```bash
+git clone https://github.com/BCsabaEngine/llm-relay /opt/llm-relay
+cd /opt/llm-relay
+npm ci --omit=dev
+npm run build
+cp .env.example .env   # then edit .env
+```
+
+### Linux — systemd
+
+```bash
+# Create a dedicated system user
+sudo useradd --system --no-create-home llm-relay
+
+# Install the unit file (substitute the actual install path)
+sed "s|/opt/llm-relay|$(pwd)|g" infra/llm-relay.service \
+  | sudo tee /etc/systemd/system/llm-relay.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now llm-relay
+
+# Follow logs
+journalctl -u llm-relay -f
+```
+
+### macOS — launchd
+
+```bash
+# Create the log directory
+sudo mkdir -p /var/log/llm-relay
+
+# Install the plist (substitute the actual install path)
+sed "s|/opt/llm-relay|$(pwd)|g" infra/com.llm-relay.plist \
+  | sudo tee /Library/LaunchDaemons/com.llm-relay.plist
+
+sudo launchctl load -w /Library/LaunchDaemons/com.llm-relay.plist
+
+# Follow logs
+tail -f /var/log/llm-relay/llm-relay.log
+```
+
+### Update
+
+```bash
+./infra/update.sh
+
+# then restart:
+sudo systemctl restart llm-relay                      # Linux
+sudo launchctl kickstart -k system/com.llm-relay      # macOS
+```
+
 ## API
 
 All requests and responses use JSON.
