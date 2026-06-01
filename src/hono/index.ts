@@ -3,6 +3,7 @@ import { logger } from '@lib';
 import { Hono } from 'hono';
 
 import { health } from './health';
+import { openapi } from './openapi';
 import { prompt } from './prompt';
 import { status } from './status';
 
@@ -22,6 +23,7 @@ export const app = new Hono()
         )
     })
   )
+  .route('/', openapi)
   .route('/health', health)
   .route('/status', status)
   .route('/prompt', prompt);
