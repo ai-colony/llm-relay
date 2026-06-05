@@ -70,7 +70,12 @@ export const executeOpenAIPrompt = async (
   const model = await resolveModel();
 
   logger.info(
-    { component: 'openai', system: prompt.system?.slice(0, 100), user: prompt.user.slice(0, 100) },
+    {
+      component: 'openai',
+      sizes: { system: prompt.system?.length, user: prompt.user.length },
+      system: prompt.system?.slice(0, 100),
+      user: prompt.user.slice(0, 100)
+    },
     'Sending prompt'
   );
   const completion = (await openai.chat.completions.create({

@@ -1,1 +1,0 @@
-llama-server --model ~/models/Qwen3.5-9B-UD-Q5_K_XL.gguf --ctx-size 32768 --threads 8 --threads-batch 8 --n-gpu-layers 99 --batch-size 512 --ubatch-size 128 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --port 8080 --reasoning-format deepseek --parallel 1 --no-perf
