@@ -26,7 +26,12 @@ npm run drizzle:migrate  # Apply generated migrations
 Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run test:coverage`.
 
 - `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repository`)
+- `test/api/` — route-handler tests; each file mounts a single Hono handler and mocks the service/repository layer (no DB, no OpenAI)
 - `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests; mirrors all four production indexes
+
+Run a single test file: `npx vitest run test/unit/service.test.ts`
+
+Coverage thresholds (enforced): 60% lines / functions / branches / statements.
 
 **Runtime requirement**: Node.js 22+ (ESM, top-level `await`).
 
@@ -37,7 +42,7 @@ Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run te
 ### Layers
 
 **HTTP layer** — `src/hono/`  
-Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `POST /prompt/add`, `GET /prompt/get`, `GET /prompt/list`, `DELETE /prompt/cancel`. New routes go under `src/hono/`.
+Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `POST /prompt/add`, `GET /prompt/get`, `GET /prompt/list`, `DELETE /prompt/cancel`, `GET /openapi.json`, `GET /docs` (Swagger UI). New routes go under `src/hono/`.
 
 - `GET /health` checks both the SQLite database and the upstream OpenAI endpoint; returns `503` (not just a non-`ok` flag) if either fails.
 - `DELETE /prompt/cancel` **deletes** the record rather than marking it cancelled; it only succeeds for `queued`, `failed`, and `failed_retry` statuses — returns `409` if `in_progress` or already `completed`.
@@ -81,6 +86,6 @@ Service files for running the built app as a managed daemon:
 - `infra/com.llm-relay.plist` — launchd daemon plist for macOS; calls `infra/start.sh` to source `.env` before starting, keeps the process alive automatically.
 - `infra/start.sh` — env-sourcing wrapper (`set -a; source .env; set +a`) used only by the launchd plist (systemd handles env natively).
 - `infra/update.sh` — cross-platform update script: `git pull && npm ci --omit=dev && npm run build`, then prints the platform-specific restart command.
-- `infra/llama-server.sh` — example command for starting a local llama.cpp server to back the relay.
+- `infra/llama-server-gemma.sh` / `infra/llama-server-qwen.sh` — example commands for starting a local llama.cpp server for Gemma or Qwen models to back the relay.
 
 Both service files use `/opt/llm-relay` as a path placeholder. When installing, pipe through `sed "s|/opt/llm-relay|$(pwd)|g"` before writing to the system location — see the README "Production deployment" section for the exact commands.
