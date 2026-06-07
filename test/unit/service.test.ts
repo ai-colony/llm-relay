@@ -60,7 +60,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('does nothing when no prompts are queued', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(undefined);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue();
     await processQueuedPrompts();
     expect(updatePromptSetInProgress).not.toHaveBeenCalled();
   });

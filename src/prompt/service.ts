@@ -79,7 +79,10 @@ export const processQueuedPrompts = async () => {
 
   try {
     await updatePromptSetInProgress(prompt.id);
-    logger.debug({ component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId }, 'Prompt picked up');
+    logger.debug(
+      { component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId },
+      'Prompt picked up'
+    );
 
     const {
       reasoning,
@@ -94,14 +97,24 @@ export const processQueuedPrompts = async () => {
       responseTimeMs,
       responseTokenPerSecond
     });
-    logger.info({ component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId }, 'Prompt completed');
+    logger.info(
+      { component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId },
+      'Prompt completed'
+    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const retryable = isTransientError(error);
     const nextRetryAt = retryable ? computeNextRetryAt(prompt.retryCount + 1) : undefined;
     await updatePromptSetFailed(prompt.id, errorMessage, retryable, nextRetryAt);
     logger.error(
-      { component: 'worker', error, clientName: prompt.clientName, requestId: prompt.requestId, retryable, retryCount: prompt.retryCount },
+      {
+        component: 'worker',
+        error,
+        clientName: prompt.clientName,
+        requestId: prompt.requestId,
+        retryable,
+        retryCount: prompt.retryCount
+      },
       'Prompt failed'
     );
   }

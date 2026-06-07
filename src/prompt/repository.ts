@@ -112,9 +112,7 @@ export const findPromptsByClientName = (clientName: string, status?: PromptStatu
       completedAt: prompts.completedAt
     })
     .from(prompts)
-    .where(
-      and(eq(prompts.clientName, clientName), status ? eq(prompts.status, status) : undefined)
-    )
+    .where(and(eq(prompts.clientName, clientName), status ? eq(prompts.status, status) : undefined))
     .orderBy(prompts.createdAt)
     .limit(limit);
 
