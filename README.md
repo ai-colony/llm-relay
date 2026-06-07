@@ -16,7 +16,7 @@ Local or self-hosted LLMs (e.g. llama.cpp, Ollama, vLLM) typically handle only a
 
 ## Infrastructure requirements
 
-- **Node.js** 22+ (ESM, top-level `await`)
+- **Node.js** 24+ (ESM, top-level `await`)
 - **An OpenAI-compatible API** — any endpoint that implements `GET /models` and `POST /chat/completions` with streaming (llama.cpp server, Ollama, vLLM, LM Studio, the real OpenAI, etc.)
 - **SQLite** — no separate database process needed; the file is created automatically on first run
 
