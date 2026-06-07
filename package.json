@@ -27,7 +27,10 @@
     "npm:reinstall": "rm -rf ./node_modules && rm -f ./package-lock.json && npm i && npm i",
     "drizzle:push": "npx drizzle-kit push",
     "drizzle:generate": "npx drizzle-kit generate",
-    "drizzle:migrate": "npx drizzle-kit migrate"
+    "drizzle:migrate": "npx drizzle-kit migrate",
+    "docker:build": "docker build --force-rm -t llm-relay:$npm_package_version .",
+    "docker:run": "docker run --rm --env-file .env.docker --name llm-relay-$npm_package_version --network=host -v llm-relay-data:/app/data llm-relay:$npm_package_version",
+    "docker:it": "docker run -it --rm --env-file .env.docker --name llm-relay-$npm_package_version -v llm-relay-data:/app/data llm-relay:$npm_package_version /bin/bash"
   },
   "repository": {
     "type": "git",
@@ -51,7 +54,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.9.1",
+    "@types/node": "^25.9.2",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
     "@vitest/coverage-v8": "^4.1.8",
