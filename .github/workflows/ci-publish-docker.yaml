@@ -59,7 +59,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Docker image
-        if: env.version_changed == 'true'
+        # if: env.version_changed == 'true'
         run: |
           REPOSITORY=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           docker push ghcr.io/$REPOSITORY:${{ env.CURRENT_VERSION }}
