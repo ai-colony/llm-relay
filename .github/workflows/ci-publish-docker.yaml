@@ -2,8 +2,8 @@ name: Main CI pipeline - Publish Docker Image
 
 on:
   push:
-    # paths:
-    #   - package.json
+    paths:
+      - package.json
     branches:
       - main
 
@@ -41,17 +41,16 @@ jobs:
             echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
           else
             echo "No version upgrade detected."
-            echo "CURRENT_VERSION=1.2.0" >> $GITHUB_ENV
           fi
 
       - name: Build Docker image
-        # if: env.version_changed == 'true'
+        if: env.version_changed == 'true'
         run: |
           REPOSITORY=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           docker build -t ghcr.io/$REPOSITORY:${{ env.CURRENT_VERSION }} .
 
       - name: Log in to GitHub Container Registry
-        # if: env.version_changed == 'true'
+        if: env.version_changed == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -59,7 +58,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Docker image
-        # if: env.version_changed == 'true'
+        if: env.version_changed == 'true'
         run: |
           REPOSITORY=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           docker push ghcr.io/$REPOSITORY:${{ env.CURRENT_VERSION }}
