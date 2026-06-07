@@ -50,56 +50,6 @@ npm run build
 npm start
 ```
 
-## Docker
-
-Pre-built images are published to GitHub Container Registry and tagged by version:
-
-```bash
-docker pull ghcr.io/bcsabaengine/llm-relay:1.2.0
-```
-
-### docker run
-
-```bash
-docker run -d \
-  --name llm-relay \
-  --network host \
-  -e OPENAI_URL=http://localhost:8080/v1 \
-  -e OPENAI_MODEL="" \
-  -e OPENAI_KEY=none \
-  -e OPENAI_TIMEOUT=10000 \
-  -e PORT=3000 \
-  -e LOG_LEVEL=info \
-  -e DATABASE_FILENAME=/app/data/database.sqlite \
-  -v llm-relay-data:/app/data \
-  ghcr.io/bcsabaengine/llm-relay:1.2.0
-```
-
-Key points:
-
-- **SQLite path**: the database lives at `/app/data/database.sqlite` inside the container. Always mount a named volume or host directory at `/app/data` so data survives container restarts.
-- **Network**: `--network host` lets the container reach a local LLM server (e.g. llama.cpp on `localhost:8080`) without extra routing. If you use bridge networking instead, set `OPENAI_URL` to `http://host.docker.internal:8080/v1`.
-- **Port**: the relay listens on `PORT` (default `3000`). With `--network host` no `-p` mapping is needed; with bridge networking add `-p 3000:3000`.
-
-### docker compose
-
-```bash
-# Copy and edit the compose environment, then:
-docker compose up -d
-```
-
-The bundled `docker-compose.yml` uses `host.docker.internal` as the upstream host so it works on Docker Desktop (Mac/Windows). On Linux with bridge networking replace it with the host gateway IP, or switch the service to `network_mode: host`.
-
-### npm helper scripts
-
-```bash
-npm run docker:build   # build image tagged llm-relay:<version>
-npm run docker:run     # run with --network=host and llm-relay-data volume
-npm run docker:it      # interactive shell in a fresh container
-```
-
-These scripts read `OPENAI_*` and other variables from `.env.docker` (create it from `.env.example`).
-
 ## Logs
 
 `llm-relay` uses [Pino](https://github.com/pinojs/pino) structured JSON logging. Every log entry includes a `component` field:
@@ -130,9 +80,47 @@ The `openai` completion log includes inference performance metrics useful for mo
 
 ## Production deployment
 
-Service definition files for Linux (systemd) and macOS (launchd) live in `infra/`.
+### Docker
 
-### Install
+Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.2.0`.
+
+```bash
+docker run -d \
+  --name llm-relay \
+  -e DATABASE_FILENAME=/app/data/database.sqlite \
+  -e OPENAI_URL=http://host.docker.internal:8080/v1 \
+  -v llm-relay:/app/data \
+  ghcr.io/ai-colony/llm-relay:1.2.0
+```
+
+Key points:
+
+- **SQLite path**: the database lives at `/app/data/database.sqlite` inside the container. Always mount a named volume or host directory at `/app/data` so data survives container restarts.
+- **Network**: uses `host.docker.internal` to reach a local LLM server. On Linux with bridge networking replace it with the host gateway IP, or use `--network host` and `OPENAI_URL=http://localhost:8080/v1` instead.
+- **Port**: the relay listens on `PORT` (default `3000`). Add `-p 3000:3000` to expose it from a bridge-networked container.
+
+#### docker compose
+
+```bash
+# Copy and edit the compose environment, then:
+docker compose up -d
+```
+
+The bundled `docker-compose.yml` uses `host.docker.internal` as the upstream host so it works on Docker Desktop (Mac/Windows). On Linux with bridge networking replace it with the host gateway IP, or switch the service to `network_mode: host`.
+
+#### npm helper scripts
+
+```bash
+npm run docker:build   # build image tagged llm-relay:<version>
+npm run docker:run     # run with --network=host and llm-relay-data volume
+npm run docker:it      # interactive shell in a fresh container
+```
+
+These scripts read `OPENAI_*` and other variables from `.env.docker` (create it from `.env.example`).
+
+### From source
+
+Service definition files for Linux (systemd) and macOS (launchd) live in `infra/`.
 
 ```bash
 git clone https://github.com/BCsabaEngine/llm-relay /opt/llm-relay
