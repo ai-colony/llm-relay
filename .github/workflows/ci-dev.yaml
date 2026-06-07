@@ -1,4 +1,4 @@
-name: DEV pipeline
+name: Dev CI
 
 on:
   push:
@@ -7,16 +7,18 @@ on:
 
 jobs:
   check:
-    name: Source Revision
+    name: Lint, Build & Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
         node-version: [24, 26]
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v6
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
