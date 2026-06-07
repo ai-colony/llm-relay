@@ -2,8 +2,8 @@ name: Main CI pipeline - Publish Docker Image
 
 on:
   push:
-    paths:
-      - package.json
+    # paths:
+    #   - package.json
     branches:
       - main
 
