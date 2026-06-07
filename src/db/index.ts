@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { schema } from './schema';
 
 const sqlite = new Database(config.database.filename);
-const client = drizzle({ client: sqlite, schema });
+const client = drizzle({ client: sqlite });
 
 export const database = {
   dbClient: client,
