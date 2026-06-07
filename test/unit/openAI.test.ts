@@ -16,14 +16,12 @@ const { mockModelsList, mockCompletionsCreate } = vi.hoisted(() => ({
   mockCompletionsCreate: vi.fn()
 }));
 
-function MockOpenAI(this: object) {
-  Object.assign(this, {
-    models: { list: mockModelsList },
-    chat: { completions: { create: mockCompletionsCreate } }
-  });
-}
-
-vi.mock('openai', () => ({ default: MockOpenAI }));
+vi.mock('openai', () => ({
+  default: class MockOpenAI {
+    models = { list: mockModelsList };
+    chat = { completions: { create: mockCompletionsCreate } };
+  }
+}));
 
 import { checkOpenAI, executeOpenAIPrompt } from '../../src/lib/openAI';
 
@@ -131,5 +129,83 @@ describe('executeOpenAIPrompt', () => {
     const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
     expect(callArgs.messages).toHaveLength(2);
     expect(callArgs.messages[0]).toMatchObject({ role: 'system', content: 'sys prompt' });
+  });
+});
+
+const makeOpenAIMock = () => ({
+  default: class MockOpenAI {
+    models = { list: mockModelsList };
+    chat = { completions: { create: mockCompletionsCreate } };
+  }
+});
+
+const makeConfigMock = (model: string) => ({
+  config: { openai: { url: 'http://test/v1', model, key: 'k', timeout: 5000 }, log: {}, http: {}, database: {} }
+});
+
+const makeLoggerMock = () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } });
+
+describe('resolveModel', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockModelsList.mockReset();
+    mockCompletionsCreate.mockReset();
+  });
+
+  it('resolves the model only once across multiple executeOpenAIPrompt calls', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model'));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    mockModelsList.mockResolvedValue({ data: [{ id: 'test-model' }] });
+    mockCompletionsCreate.mockResolvedValue(makeStream([{ content: 'ok' }]));
+
+    const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
+    await exec({ system: undefined, user: 'first' }, 0);
+    await exec({ system: undefined, user: 'second' }, 0);
+
+    expect(mockModelsList).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the first available model when config.openai.model is empty', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock(''));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    mockModelsList.mockResolvedValue({ data: [{ id: 'first-model' }, { id: 'second-model' }] });
+    mockCompletionsCreate.mockResolvedValue(makeStream([{ content: 'ok' }]));
+
+    const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
+    await exec({ system: undefined, user: 'hi' }, 0);
+
+    const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { model: string };
+    expect(callArgs.model).toBe('first-model');
+  });
+
+  it('throws when the configured model is not in the available list', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('missing-model'));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    mockModelsList.mockResolvedValue({ data: [{ id: 'other-model' }] });
+
+    const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
+    await expect(exec({ system: undefined, user: 'hi' }, 0)).rejects.toThrow('No models found');
+  });
+
+  it('resets the cached promise on error so the next call retries model resolution', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model'));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    mockModelsList.mockRejectedValueOnce(new Error('temporary API failure'));
+    mockModelsList.mockResolvedValueOnce({ data: [{ id: 'test-model' }] });
+    mockCompletionsCreate.mockResolvedValue(makeStream([{ content: 'ok' }]));
+
+    const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
+    await expect(exec({ system: undefined, user: 'first' }, 0)).rejects.toThrow('temporary API failure');
+    await exec({ system: undefined, user: 'second' }, 0);
+
+    expect(mockModelsList).toHaveBeenCalledTimes(2);
   });
 });

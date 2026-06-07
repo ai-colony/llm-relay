@@ -17,10 +17,12 @@ npm run format:fix   # Prettier auto-fix
 npm run fix          # format:fix + lint:fix + format:fix
 npm run all          # fix + typecheck + build + test (full pipeline)
 
-# Docker:
+# Docker (requires .env.docker in the project root):
 npm run docker:build # Build image tagged llm-relay:<version>
 npm run docker:run   # Run container with --network=host and llm-relay-data volume
 npm run docker:it    # Interactive shell in a fresh container
+# Or use docker-compose.yml (uses inline env vars, no .env.docker needed):
+# docker compose up
 
 # Database schema changes (Drizzle):
 npm run drizzle:push     # Push schema changes directly to the DB (dev)
@@ -38,7 +40,7 @@ Run a single test file: `npx vitest run test/unit/service.test.ts`
 
 Coverage thresholds (enforced): 60% lines / functions / branches / statements.
 
-**Runtime requirement**: Node.js 22+ (ESM, top-level `await`).
+**Runtime requirement**: Node.js 24 or 26 (ESM, top-level `await`).
 
 ## Architecture
 

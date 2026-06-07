@@ -16,7 +16,7 @@ Local or self-hosted LLMs (e.g. llama.cpp, Ollama, vLLM) typically handle only a
 
 ## Infrastructure requirements
 
-- **Node.js** 22+ (ESM, top-level `await`)
+- **Node.js** 24+ (ESM, top-level `await`)
 - **An OpenAI-compatible API** — any endpoint that implements `GET /models` and `POST /chat/completions` with streaming (llama.cpp server, Ollama, vLLM, LM Studio, the real OpenAI, etc.)
 - **SQLite** — no separate database process needed; the file is created automatically on first run
 
@@ -84,20 +84,39 @@ The `openai` completion log includes inference performance metrics useful for mo
 
 Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.2.0`.
 
+Minimal — only the upstream URL needs to be set; everything else has a sensible default:
+
 ```bash
-docker run -d \
+docker run -d --rm \
   --name llm-relay \
-  -e DATABASE_FILENAME=/app/data/database.sqlite \
+  -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
-  -v llm-relay:/app/data \
+  -v llm-relay-data:/app/data \
+  ghcr.io/ai-colony/llm-relay:1.2.0
+```
+
+Full — all available environment variables:
+
+```bash
+docker run -d --rm \
+  --name llm-relay \
+  -p 3000:3000 \
+  -e PORT=3000 \
+  -e LOG_LEVEL=info \
+  -e OPENAI_URL=http://host.docker.internal:8080/v1 \
+  -e OPENAI_MODEL= \
+  -e OPENAI_KEY=none \
+  -e OPENAI_TIMEOUT=10000 \
+  -v llm-relay-data:/app/data \
   ghcr.io/ai-colony/llm-relay:1.2.0
 ```
 
 Key points:
 
-- **SQLite path**: the database lives at `/app/data/database.sqlite` inside the container. Always mount a named volume or host directory at `/app/data` so data survives container restarts.
+- **SQLite path**: the database lives at `/app/data/database.sqlite` — pre-configured in the image, no env var needed. Always mount a named volume or host directory at `/app/data` so data survives container restarts.
+- **`--rm`**: removes the stopped container automatically; the named volume `llm-relay-data` is unaffected, so your data is safe.
 - **Network**: uses `host.docker.internal` to reach a local LLM server. On Linux with bridge networking replace it with the host gateway IP, or use `--network host` and `OPENAI_URL=http://localhost:8080/v1` instead.
-- **Port**: the relay listens on `PORT` (default `3000`). Add `-p 3000:3000` to expose it from a bridge-networked container.
+- **Port**: the relay listens on `PORT` (default `3000`). The `-p 3000:3000` flag exposes it from the container.
 
 #### docker compose
 

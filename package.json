@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "24 || 26"
   },
   "scripts": {
     "dev": "nodemon --exec tsx ./src/index.ts | ./node_modules/.bin/pino-pretty -i time,host,pid,traceId,sessionId,userId -S",
@@ -62,7 +62,7 @@
     "eslint": "^10.4.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^13.0.0",
-    "eslint-plugin-unicorn": "^64.0.0",
+    "eslint-plugin-unicorn": "^65.0.0",
     "globals": "^17.6.0",
     "nodemon": "^3.1.14",
     "pino-pretty": "^13.1.3",

@@ -3,10 +3,7 @@ import { findPromptByClientNameAndRequestId } from '@prompt/repository';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-const QuerySchema = z.object({
-  clientName: z.string(),
-  requestId: z.coerce.number().int().positive()
-});
+import { QuerySchema } from './schemas';
 
 const ResponseSchema = z.discriminatedUnion('status', [
   z.object({ status: z.enum(['queued', 'in_progress', 'failed_retry']) }),

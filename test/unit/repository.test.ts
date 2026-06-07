@@ -8,7 +8,9 @@ vi.mock('@db', async () => {
 
 import {
   addPrompt,
+  countQueuedPrompts,
   deletePromptByClientNameAndRequestId,
+  deletePromptForOverwrite,
   findCallbackPendingPrompts,
   findFirstQueuedPrompt,
   findPromptByClientNameAndRequestId,
@@ -52,34 +54,41 @@ describe('addPrompt', () => {
     const id = await addPrompt({
       ...basePrompt,
       systemPrompt: 'be helpful',
-      callbackUrl: 'http://example.com/cb'
+      callbackUrl: 'https://example.com/cb'
     });
     const [prompt] = await findPromptByClientNameAndRequestId('test-client', 1);
     expect(prompt?.systemPrompt).toBe('be helpful');
-    expect(prompt?.callbackUrl).toBe('http://example.com/cb');
+    expect(prompt?.callbackUrl).toBe('https://example.com/cb');
     expect(Number(id)).toBeGreaterThan(0);
   });
 });
 
 describe('findFirstQueuedPrompt', () => {
-  it('returns an empty array when no prompts are queued', async () => {
+  it('returns undefined when no prompts are queued', async () => {
     const result = await findFirstQueuedPrompt();
-    expect(result).toHaveLength(0);
+    expect(result).toBeUndefined();
   });
 
   it('returns the oldest queued prompt (FIFO order)', async () => {
     await addPrompt({ ...basePrompt, requestId: 1 });
     await addPrompt({ ...basePrompt, requestId: 2 });
     const result = await findFirstQueuedPrompt();
-    expect(result).toHaveLength(1);
-    expect(result[0]?.requestId).toBe(1);
+    expect(result?.requestId).toBe(1);
   });
 
   it('returns failed_retry prompts as eligible for processing', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptSetFailed(Number(id), 'timeout', true);
     const result = await findFirstQueuedPrompt();
-    expect(result[0]?.status).toBe('failed_retry');
+    expect(result?.status).toBe('failed_retry');
+  });
+
+  it('does not return a failed_retry prompt whose nextRetryAt is in the future', async () => {
+    const id = await addPrompt(basePrompt);
+    const futureDate = new Date(Date.now() + 60_000);
+    await updatePromptSetFailed(Number(id), 'timeout', true, futureDate);
+    const result = await findFirstQueuedPrompt();
+    expect(result).toBeUndefined();
   });
 });
 
@@ -140,7 +149,7 @@ describe('getPromptStatusCounts', () => {
   });
 
   it('counts callback pending prompts (completed + callbackUrl + not delivered)', async () => {
-    const id = await addPrompt({ ...basePrompt, callbackUrl: 'http://example.com/cb' });
+    const id = await addPrompt({ ...basePrompt, callbackUrl: 'https://example.com/cb' });
     await updatePromptSetInProgress(Number(id));
     await updatePromptSetCompleted(Number(id), completionData);
 
@@ -189,7 +198,7 @@ describe('findPromptsByClientName', () => {
 
 describe('findCallbackPendingPrompts', () => {
   it('returns only completed prompts with a callbackUrl that have not been delivered', async () => {
-    const idWithCallback = await addPrompt({ ...basePrompt, requestId: 1, callbackUrl: 'http://cb.example.com' });
+    const idWithCallback = await addPrompt({ ...basePrompt, requestId: 1, callbackUrl: 'https://cb.example.com' });
     const idWithoutCallback = await addPrompt({ ...basePrompt, requestId: 2 });
 
     await updatePromptSetInProgress(Number(idWithCallback));
@@ -199,7 +208,16 @@ describe('findCallbackPendingPrompts', () => {
 
     const pending = await findCallbackPendingPrompts();
     expect(pending).toHaveLength(1);
-    expect(pending[0]?.callbackUrl).toBe('http://cb.example.com');
+    expect(pending[0]?.callbackUrl).toBe('https://cb.example.com');
+  });
+
+  it('does not return a prompt whose callback has already been delivered', async () => {
+    const id = await addPrompt({ ...basePrompt, callbackUrl: 'https://cb.example.com' });
+    await updatePromptSetInProgress(Number(id));
+    await updatePromptSetCompleted(Number(id), completionData);
+    await updatePromptSetCallbackCompleted(Number(id));
+    const pending = await findCallbackPendingPrompts();
+    expect(pending).toHaveLength(0);
   });
 });
 
@@ -215,6 +233,55 @@ describe('deletePromptByClientNameAndRequestId', () => {
     const id = await addPrompt(basePrompt);
     await updatePromptSetInProgress(Number(id));
     await deletePromptByClientNameAndRequestId('test-client', 1);
+    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 1);
+    expect(prompt?.status).toBe('in_progress');
+  });
+});
+
+describe('countQueuedPrompts', () => {
+  it('returns 0 when no prompts exist', async () => {
+    const count = await countQueuedPrompts();
+    expect(count).toBe(0);
+  });
+
+  it('counts queued prompts', async () => {
+    await addPrompt({ ...basePrompt, requestId: 1 });
+    await addPrompt({ ...basePrompt, requestId: 2 });
+    const count = await countQueuedPrompts();
+    expect(count).toBe(2);
+  });
+
+  it('also counts failed_retry prompts since the worker processes them too', async () => {
+    const id1 = await addPrompt({ ...basePrompt, requestId: 1 });
+    const id2 = await addPrompt({ ...basePrompt, requestId: 2 });
+    await updatePromptSetFailed(Number(id2), 'timeout', true);
+    const count = await countQueuedPrompts();
+    expect(count).toBe(2);
+    expect(Number(id1)).toBeGreaterThan(0);
+  });
+});
+
+describe('deletePromptForOverwrite', () => {
+  it('deletes a queued prompt', async () => {
+    await addPrompt(basePrompt);
+    await deletePromptForOverwrite('test-client', 1);
+    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 1);
+    expect(prompt).toBeUndefined();
+  });
+
+  it('deletes a completed prompt (unlike deletePromptByClientNameAndRequestId)', async () => {
+    const id = await addPrompt(basePrompt);
+    await updatePromptSetInProgress(Number(id));
+    await updatePromptSetCompleted(Number(id), completionData);
+    await deletePromptForOverwrite('test-client', 1);
+    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 1);
+    expect(prompt).toBeUndefined();
+  });
+
+  it('does not delete an in_progress prompt', async () => {
+    const id = await addPrompt(basePrompt);
+    await updatePromptSetInProgress(Number(id));
+    await deletePromptForOverwrite('test-client', 1);
     const [prompt] = await findPromptByClientNameAndRequestId('test-client', 1);
     expect(prompt?.status).toBe('in_progress');
   });

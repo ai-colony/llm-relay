@@ -1,12 +1,8 @@
 import { zValidator } from '@hono/zod-validator';
 import { deletePromptByClientNameAndRequestId, findPromptByClientNameAndRequestId } from '@prompt/repository';
 import { Hono } from 'hono';
-import { z } from 'zod';
 
-const QuerySchema = z.object({
-  clientName: z.string(),
-  requestId: z.coerce.number().int().positive()
-});
+import { QuerySchema } from './schemas';
 
 export const cancel = new Hono().delete('/', zValidator('query', QuerySchema), async (c) => {
   const { clientName, requestId } = c.req.valid('query');
