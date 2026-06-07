@@ -124,6 +124,44 @@ describe('processQueuedPrompts', () => {
 
     expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'aborted', true, expect.any(Date));
   });
+
+  it.each([['etimedout'], ['econnrefused'], ['socket hang up'], ['network error']])(
+    'treats "%s" as a transient error',
+    async (message) => {
+      vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt()]);
+      vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error(message));
+
+      await processQueuedPrompts();
+
+      expect(updatePromptSetFailed).toHaveBeenCalledWith(1, message, true, expect.any(Date));
+    }
+  );
+
+  it('treats an error with a transient cause as transient', async () => {
+    const cause = new Error('fetch failed');
+    const outer = new Error('wrapped');
+    (outer as Error & { cause: unknown }).cause = cause;
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt()]);
+    vi.mocked(executeOpenAIPrompt).mockRejectedValue(outer);
+
+    await processQueuedPrompts();
+
+    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'wrapped', true, expect.any(Date));
+  });
+
+  it('caps the retry backoff at 60 s for very large retry counts', async () => {
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 100 })]);
+    vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
+
+    const before = Date.now();
+    await processQueuedPrompts();
+    const after = Date.now();
+
+    const nextRetryAt = vi.mocked(updatePromptSetFailed).mock.calls[0]?.[3];
+    const nextRetryAtMs = (nextRetryAt as Date).getTime();
+    expect(nextRetryAtMs).toBeGreaterThanOrEqual(before + 60_000);
+    expect(nextRetryAtMs).toBeLessThanOrEqual(after + 61_000);
+  });
 });
 
 describe('processCallbackPendingPrompts', () => {
@@ -141,7 +179,7 @@ describe('processCallbackPendingPrompts', () => {
   it('sends the callback and marks it as completed on success', async () => {
     const prompt = makeQueuedPrompt({
       status: 'completed',
-      callbackUrl: 'http://example.com/callback',
+      callbackUrl: 'https://example.com/callback',
       reasoning: 'thought',
       response: 'answer'
     });
@@ -151,12 +189,12 @@ describe('processCallbackPendingPrompts', () => {
 
     await processCallbackPendingPrompts();
 
-    expect(mockFetch).toHaveBeenCalledWith('http://example.com/callback', expect.objectContaining({ method: 'POST' }));
+    expect(mockFetch).toHaveBeenCalledWith('https://example.com/callback', expect.objectContaining({ method: 'POST' }));
     expect(updatePromptSetCallbackCompleted).toHaveBeenCalledWith(1);
   });
 
   it('logs the error and skips marking complete when the fetch throws', async () => {
-    const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: 'http://example.com/callback' });
+    const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: 'https://example.com/callback' });
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
 
