@@ -78,6 +78,7 @@ export const processQueuedPrompts = async () => {
   if (queuedPrompt.length === 0) return;
 
   const firstQueuedPrompt = queuedPrompt[0]!;
+  const systemPrompt = firstQueuedPrompt.systemPrompt ?? undefined;
   try {
     await updatePromptSetInProgress(firstQueuedPrompt.id);
     logger.debug(
@@ -90,7 +91,7 @@ export const processQueuedPrompts = async () => {
       response,
       timing: { reasoningTimeMs, reasoningTokenPerSecond, responseTimeMs, responseTokenPerSecond }
     } = await executeOpenAIPrompt(
-      { system: firstQueuedPrompt.systemPrompt ?? undefined, user: firstQueuedPrompt.userPrompt },
+      { system: systemPrompt, user: firstQueuedPrompt.userPrompt },
       firstQueuedPrompt.temperature
     );
     await updatePromptSetCompleted(firstQueuedPrompt.id, {
