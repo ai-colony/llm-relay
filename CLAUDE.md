@@ -17,6 +17,11 @@ npm run format:fix   # Prettier auto-fix
 npm run fix          # format:fix + lint:fix + format:fix
 npm run all          # fix + typecheck + build + test (full pipeline)
 
+# Docker:
+npm run docker:build # Build image tagged llm-relay:<version>
+npm run docker:run   # Run container with --network=host and llm-relay-data volume
+npm run docker:it    # Interactive shell in a fresh container
+
 # Database schema changes (Drizzle):
 npm run drizzle:push     # Push schema changes directly to the DB (dev)
 npm run drizzle:generate # Generate migration files
@@ -55,7 +60,7 @@ Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `
 
 **Shared library** — `src/lib/` (aliased as `@lib`)
 
-- `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics.
+- `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics. The "Sending prompt" log includes a `sizes` field with character counts for system and user prompts.
 - `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`).
 - `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 
