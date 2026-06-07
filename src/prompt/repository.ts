@@ -47,7 +47,8 @@ export const findFirstQueuedPrompt = () =>
       )
     )
     .orderBy(prompts.createdAt)
-    .limit(1);
+    .limit(1)
+    .then(([row]) => row);
 
 // Update prompts
 export const updatePromptSetInProgress = (id: number) =>
@@ -112,7 +113,7 @@ export const findPromptsByClientName = (clientName: string, status?: PromptStatu
     })
     .from(prompts)
     .where(
-      status ? and(eq(prompts.clientName, clientName), eq(prompts.status, status)) : eq(prompts.clientName, clientName)
+      and(eq(prompts.clientName, clientName), status ? eq(prompts.status, status) : undefined)
     )
     .orderBy(prompts.createdAt)
     .limit(limit);

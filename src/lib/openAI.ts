@@ -56,7 +56,7 @@ export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
 }
 
 export const executeOpenAIPrompt = async (
-  prompt: { system: string | undefined; user: string },
+  prompt: { system: string | null | undefined; user: string },
   temperature: number
 ): Promise<{
   reasoning: string;

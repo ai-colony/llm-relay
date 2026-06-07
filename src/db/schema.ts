@@ -31,7 +31,7 @@ export const prompts = sqliteTable(
     responseTokenPerSecond: integer()
   },
   (t) => [
-    index('idx_prompts_callback').on(t.callbackCompleted, t.status, t.callbackUrl),
+    index('idx_prompts_callback').on(t.status, t.callbackCompleted, t.callbackUrl),
     index('idx_prompts_status_created').on(t.status, t.createdAt),
     index('idx_prompts_client_created').on(t.clientName, t.createdAt),
     uniqueIndex('idx_prompts_client_request').on(t.clientName, t.requestId)

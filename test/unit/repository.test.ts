@@ -64,24 +64,23 @@ describe('addPrompt', () => {
 });
 
 describe('findFirstQueuedPrompt', () => {
-  it('returns an empty array when no prompts are queued', async () => {
+  it('returns undefined when no prompts are queued', async () => {
     const result = await findFirstQueuedPrompt();
-    expect(result).toHaveLength(0);
+    expect(result).toBeUndefined();
   });
 
   it('returns the oldest queued prompt (FIFO order)', async () => {
     await addPrompt({ ...basePrompt, requestId: 1 });
     await addPrompt({ ...basePrompt, requestId: 2 });
     const result = await findFirstQueuedPrompt();
-    expect(result).toHaveLength(1);
-    expect(result[0]?.requestId).toBe(1);
+    expect(result?.requestId).toBe(1);
   });
 
   it('returns failed_retry prompts as eligible for processing', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptSetFailed(Number(id), 'timeout', true);
     const result = await findFirstQueuedPrompt();
-    expect(result[0]?.status).toBe('failed_retry');
+    expect(result?.status).toBe('failed_retry');
   });
 
   it('does not return a failed_retry prompt whose nextRetryAt is in the future', async () => {
@@ -89,7 +88,7 @@ describe('findFirstQueuedPrompt', () => {
     const futureDate = new Date(Date.now() + 60_000);
     await updatePromptSetFailed(Number(id), 'timeout', true, futureDate);
     const result = await findFirstQueuedPrompt();
-    expect(result).toHaveLength(0);
+    expect(result).toBeUndefined();
   });
 });
 

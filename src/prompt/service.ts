@@ -14,8 +14,8 @@ const computeNextRetryAt = (recentRetryCount: number): Date => {
   return new Date(Date.now() + delayMs);
 };
 
-const isTransientError = (error: unknown): boolean => {
-  if (!(error instanceof Error)) return false;
+const isTransientError = (error: unknown, depth = 0): boolean => {
+  if (!(error instanceof Error) || depth > 5) return false;
   const message = error.message.toLowerCase();
   return (
     error.name === 'AbortError' ||
@@ -25,7 +25,7 @@ const isTransientError = (error: unknown): boolean => {
     message.includes('fetch failed') ||
     message.includes('network error') ||
     message.includes('socket hang up') ||
-    isTransientError(error.cause)
+    isTransientError(error.cause, depth + 1)
   );
 };
 
@@ -74,27 +74,19 @@ export const processCallbackPendingPrompts = async () => {
 };
 
 export const processQueuedPrompts = async () => {
-  const queuedPrompt = await findFirstQueuedPrompt();
-  if (queuedPrompt.length === 0) return;
+  const prompt = await findFirstQueuedPrompt();
+  if (!prompt) return;
 
-  const firstQueuedPrompt = queuedPrompt[0]!;
-  const systemPrompt = firstQueuedPrompt.systemPrompt ?? undefined;
   try {
-    await updatePromptSetInProgress(firstQueuedPrompt.id);
-    logger.debug(
-      { component: 'worker', clientName: firstQueuedPrompt.clientName, requestId: firstQueuedPrompt.requestId },
-      'Prompt picked up'
-    );
+    await updatePromptSetInProgress(prompt.id);
+    logger.debug({ component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId }, 'Prompt picked up');
 
     const {
       reasoning,
       response,
       timing: { reasoningTimeMs, reasoningTokenPerSecond, responseTimeMs, responseTokenPerSecond }
-    } = await executeOpenAIPrompt(
-      { system: systemPrompt, user: firstQueuedPrompt.userPrompt },
-      firstQueuedPrompt.temperature
-    );
-    await updatePromptSetCompleted(firstQueuedPrompt.id, {
+    } = await executeOpenAIPrompt({ system: prompt.systemPrompt, user: prompt.userPrompt }, prompt.temperature);
+    await updatePromptSetCompleted(prompt.id, {
       reasoning,
       response,
       reasoningTimeMs,
@@ -102,24 +94,14 @@ export const processQueuedPrompts = async () => {
       responseTimeMs,
       responseTokenPerSecond
     });
-    logger.info(
-      { component: 'worker', clientName: firstQueuedPrompt.clientName, requestId: firstQueuedPrompt.requestId },
-      'Prompt completed'
-    );
+    logger.info({ component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId }, 'Prompt completed');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const retryable = isTransientError(error);
-    const nextRetryAt = retryable ? computeNextRetryAt(firstQueuedPrompt.retryCount + 1) : undefined;
-    await updatePromptSetFailed(firstQueuedPrompt.id, errorMessage, retryable, nextRetryAt);
+    const nextRetryAt = retryable ? computeNextRetryAt(prompt.retryCount + 1) : undefined;
+    await updatePromptSetFailed(prompt.id, errorMessage, retryable, nextRetryAt);
     logger.error(
-      {
-        component: 'worker',
-        error,
-        clientName: firstQueuedPrompt.clientName,
-        requestId: firstQueuedPrompt.requestId,
-        retryable,
-        retryCount: firstQueuedPrompt.retryCount
-      },
+      { component: 'worker', error, clientName: prompt.clientName, requestId: prompt.requestId, retryable, retryCount: prompt.retryCount },
       'Prompt failed'
     );
   }

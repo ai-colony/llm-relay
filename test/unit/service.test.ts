@@ -60,13 +60,13 @@ describe('processQueuedPrompts', () => {
   });
 
   it('does nothing when no prompts are queued', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(undefined);
     await processQueuedPrompts();
     expect(updatePromptSetInProgress).not.toHaveBeenCalled();
   });
 
   it('marks the prompt completed on successful execution', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt()]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
     vi.mocked(executeOpenAIPrompt).mockResolvedValue(successfulResult);
 
     await processQueuedPrompts();
@@ -79,7 +79,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('marks the prompt as failed_retry on a transient error', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 0 }));
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
 
     await processQueuedPrompts();
@@ -88,7 +88,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('keeps retrying transient errors indefinitely (no retry limit)', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 10 })]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 10 }));
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('econnreset'));
 
     await processQueuedPrompts();
@@ -97,7 +97,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('marks the prompt as permanently failed for non-transient errors regardless of retry count', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 0 }));
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('model not found'));
 
     await processQueuedPrompts();
@@ -106,7 +106,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('converts a non-Error thrown value to a string for the failure message', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt()]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
     vi.mocked(executeOpenAIPrompt).mockRejectedValue('plain string error');
 
     await processQueuedPrompts();
@@ -117,7 +117,7 @@ describe('processQueuedPrompts', () => {
   it('treats AbortError as transient', async () => {
     const abortError = new Error('aborted');
     abortError.name = 'AbortError';
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 0 }));
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(abortError);
 
     await processQueuedPrompts();
@@ -128,7 +128,7 @@ describe('processQueuedPrompts', () => {
   it.each([['etimedout'], ['econnrefused'], ['socket hang up'], ['network error']])(
     'treats "%s" as a transient error',
     async (message) => {
-      vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt()]);
+      vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
       vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error(message));
 
       await processQueuedPrompts();
@@ -141,7 +141,7 @@ describe('processQueuedPrompts', () => {
     const cause = new Error('fetch failed');
     const outer = new Error('wrapped');
     (outer as Error & { cause: unknown }).cause = cause;
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt()]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(outer);
 
     await processQueuedPrompts();
@@ -150,7 +150,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('caps the retry backoff at 60 s for very large retry counts', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue([makeQueuedPrompt({ retryCount: 100 })]);
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 100 }));
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
 
     const before = Date.now();
