@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "type": "module",
   "engines": {
-    "node": "24 || 26"
+    "node": "24 || 26",
+    "npm": ">=10"
   },
   "scripts": {
     "dev": "nodemon --exec tsx ./src/index.ts | ./node_modules/.bin/pino-pretty -i time,host,pid,traceId,sessionId,userId -S",
@@ -45,7 +46,10 @@
     "hono",
     "typescript"
   ],
-  "author": "BCsabaEngine",
+  "author": {
+    "name": "BCsabaEngine",
+    "url": "https://github.com/BCsabaEngine"
+  },
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/ai-colony/llm-relay/issues"
@@ -54,7 +58,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.9.2",
+    "@types/node": "^24",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
     "@vitest/coverage-v8": "^4.1.8",
