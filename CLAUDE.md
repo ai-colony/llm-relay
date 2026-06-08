@@ -34,7 +34,7 @@ Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run te
 
 - `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repository`)
 - `test/api/` — route-handler tests; each file mounts a single Hono handler and mocks the service/repository layer (no DB, no OpenAI)
-- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests; mirrors all four production indexes
+- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests; mirrors all four production indexes using raw SQL (not Drizzle migrations), so **schema changes also require manual updates here**
 
 Run a single test file: `npx vitest run test/unit/service.test.ts`
 
@@ -67,7 +67,7 @@ Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `
 - `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 
 **Data layer** — `src/db/` (aliased as `@db`)  
-SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src/db/schema.ts`. Schema changes are **not** auto-applied — run `npm run drizzle:push` (dev) or generate+migrate (prod) after editing the schema.
+SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src/db/schema.ts`. Schema changes are **not** auto-applied — run `npm run drizzle:push` (dev) or generate+migrate (prod) after editing the schema. The `prompts` table enforces a unique index on `(clientName, requestId)` — duplicate pairs are rejected at the DB layer.
 
 ### Key patterns
 
@@ -94,5 +94,7 @@ Service files for running the built app as a managed daemon:
 - `infra/start.sh` — env-sourcing wrapper (`set -a; source .env; set +a`) used only by the launchd plist (systemd handles env natively).
 - `infra/update.sh` — cross-platform update script: `git pull && npm ci --omit=dev && npm run build`, then prints the platform-specific restart command.
 - `infra/llama-server-gemma.sh` / `infra/llama-server-qwen.sh` — example commands for starting a local llama.cpp server for Gemma or Qwen models to back the relay.
+
+On startup, `src/index.ts` auto-applies Drizzle migrations from `./drizzle/` — production deployments must ship that folder alongside `/dist`. It also calls `resetInProgressPrompts()` to recover any prompts stuck as `in_progress` from a previous unclean shutdown.
 
 Both service files use `/opt/llm-relay` as a path placeholder. When installing, pipe through `sed "s|/opt/llm-relay|$(pwd)|g"` before writing to the system location — see the README "Production deployment" section for the exact commands.
