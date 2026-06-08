@@ -82,7 +82,7 @@ The `openai` completion log includes inference performance metrics useful for mo
 
 ### Docker
 
-Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.2.0`.
+Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.2.1`.
 
 Minimal — only the upstream URL needs to be set; everything else has a sensible default:
 
@@ -92,7 +92,7 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.2.0
+  ghcr.io/ai-colony/llm-relay:1.2.1
 ```
 
 Full — all available environment variables:
@@ -108,7 +108,7 @@ docker run -d --rm \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.2.0
+  ghcr.io/ai-colony/llm-relay:1.2.1
 ```
 
 Key points:
@@ -206,7 +206,7 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "uptime": 42,
   "queued": 3,
   "pending": 1,
