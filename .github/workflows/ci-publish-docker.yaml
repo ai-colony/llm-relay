@@ -70,3 +70,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/${{ env.REPOSITORY }}:${{ env.CURRENT_VERSION }}
+          annotations: |
+            index:org.opencontainers.image.description=HTTP relay server that queues LLM prompts against OpenAI-compatible APIs with SQLite persistence and async callback delivery
+            index:org.opencontainers.image.source=https://github.com/ai-colony/llm-relay
+            index:org.opencontainers.image.licenses=ISC

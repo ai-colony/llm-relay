@@ -26,6 +26,10 @@ COPY --chown=node:node --from=builder /app/drizzle ./drizzle
 ENV DATABASE_FILENAME=/app/data/database.sqlite
 RUN mkdir -p /app/data && chown node:node /app/data
 
+LABEL org.opencontainers.image.description="HTTP relay server that queues LLM prompts against OpenAI-compatible APIs with SQLite persistence and async callback delivery" \
+      org.opencontainers.image.source="https://github.com/ai-colony/llm-relay" \
+      org.opencontainers.image.licenses="ISC"
+
 USER node
 VOLUME ["/app/data"]
 EXPOSE 3000
