@@ -6,9 +6,10 @@ FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json drizzle.config.ts .
-RUN npm ci
+RUN apk add --no-cache python3 make g++ && npm ci
 COPY . .
 RUN node --run build
+RUN npm prune --omit=dev
 
 
 # Runner
@@ -16,8 +17,8 @@ FROM ${NODE_IMAGE} AS runner
 RUN apk upgrade -U
 WORKDIR /app
 
-COPY --chown=node:node package.json package-lock.json .
-RUN npm ci --omit=dev
+COPY --chown=node:node package.json .
+COPY --chown=node:node --from=builder /app/node_modules ./node_modules
 RUN npm r -g npm
 
 COPY --chown=node:node --from=builder /app/dist ./dist
