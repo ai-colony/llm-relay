@@ -49,10 +49,15 @@ Coverage thresholds (enforced): 60% lines / functions / branches / statements.
 ### Layers
 
 **HTTP layer** — `src/hono/`  
-Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `POST /prompt/add`, `GET /prompt/get`, `GET /prompt/list`, `DELETE /prompt/cancel`, `GET /openapi.json`, `GET /docs` (Swagger UI). New routes go under `src/hono/`.
+Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `GET /metrics`, `GET /openapi.json`, `GET /docs` (Swagger UI), `POST /prompt/add`, `GET /prompt/get`, `GET /prompt/list`, `DELETE /prompt/purge`, `DELETE /prompt/cancel`.
+
+Auth middleware (`src/hono/auth.ts`) is applied only to `/prompt/*` — health, status, metrics, and OpenAPI endpoints are always public. When `API_KEY` is empty the middleware is a no-op.
+
+Prompt-specific routes each live in their own file under `src/hono/prompt/` and are mounted by `src/hono/prompt/index.ts`. The shared `clientName + requestId` query schema is in `src/hono/prompt/schemas.ts` (used by both `get.ts` and `cancel.ts`). New prompt routes go there; non-prompt routes go directly under `src/hono/`.
 
 - `GET /health` checks both the SQLite database and the upstream OpenAI endpoint; returns `503` (not just a non-`ok` flag) if either fails.
 - `DELETE /prompt/cancel` **deletes** the record rather than marking it cancelled; it only succeeds for `queued`, `failed`, and `failed_retry` statuses — returns `409` if `in_progress` or already `completed`.
+- `DELETE /prompt/purge` bulk-deletes `completed` and `failed` records older than `days` days (default 7); accepts optional `clientName` to scope the purge.
 - `GET /prompt/list` caps results at 500 records.
 
 **Business logic** — `src/prompt/` (aliased as `@prompt`)
@@ -60,10 +65,11 @@ Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `
 - `src/prompt/service.ts` — worker loop functions called by the `setImmediate` loop in `src/index.ts`; processes one queued prompt per tick and handles callback delivery.
 - `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
 
-**Shared library** — `src/lib/` (aliased as `@lib`)
+**Shared library** — `src/lib/` (aliased as `@lib`)  
+`src/lib/index.ts` is the barrel; it re-exports `config`, `logger`, and `executeOpenAIPrompt`. Add new lib exports there when creating new modules.
 
 - `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics. The "Sending prompt" log includes a `sizes` field with character counts for system and user prompts.
-- `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`).
+- `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`, `OPENAI_MAX_RETRY_COUNT`).
 - `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 
 **Data layer** — `src/db/` (aliased as `@db`)  
@@ -72,7 +78,7 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 ### Key patterns
 
 - **Worker loop**: `src/index.ts` uses `setImmediate` + a 100 ms `setTimeout` between iterations to call `processQueuedPrompts` then `processCallbackPendingPrompts`. Each tick processes one queued prompt (lowest `priority` first, FIFO on ties) and up to 50 pending callbacks (FIFO).
-- **Prompt state machine**: `queued` → `in_progress` → `completed | failed | failed_retry`. `failed_retry` is re-picked by the worker after an exponential backoff delay (`2^retryCount * 1s`, capped at 60 s) stored in `nextRetryAt`; there is no retry limit — transient errors retry indefinitely. `failed` is terminal (non-transient errors only).
+- **Prompt state machine**: `queued` → `in_progress` → `completed | failed | failed_retry`. `failed_retry` is re-picked by the worker after an exponential backoff delay (`2^retryCount * 1s`, capped at 60 s) stored in `nextRetryAt`. After `OPENAI_MAX_RETRY_COUNT` transient failures the prompt moves to `failed` with `statusError: "max_retries_exceeded"`. `failed` is terminal (also used for non-transient errors on first failure).
 - **Async callback**: Each prompt can carry a `callbackUrl`; the relay POSTs the result there after completion. `callbackCompleted` tracks delivery separately from prompt completion.
 - **Streaming metrics**: `openAI.ts` detects the phase boundary between `reasoning_content` and `content` chunks to record separate timings and token rates. A `component: 'openai'` info log is emitted on completion with the full timing breakdown.
 - **Logging convention**: all log calls include a `component` field. `info`-level covers lifecycle events (prompt completed, callback sent, model resolved). `debug`-level adds per-request HTTP logs and prompt pick-up events — enable with `LOG_LEVEL=debug`.

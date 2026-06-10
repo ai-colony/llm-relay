@@ -1,6 +1,6 @@
 {
   "name": "llm-relay",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "description": "HTTP relay server that queues LLM prompts against OpenAI-compatible APIs with SQLite persistence and async callback delivery",
   "main": "dist/index.js",
