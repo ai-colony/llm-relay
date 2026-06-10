@@ -328,6 +328,12 @@ type GetPromptQuery = z.infer<typeof GetPromptQuery>;
 { "status": "failed", "statusError": "ECONNRESET" }
 ```
 
+**Response `404` — prompt not found:**
+
+```json
+{ "success": false, "error": "Prompt not found" }
+```
+
 ```typescript
 const GetPromptResponse = z.discriminatedUnion('status', [
   z.object({ status: z.enum(['queued', 'in_progress', 'failed_retry']) }),
