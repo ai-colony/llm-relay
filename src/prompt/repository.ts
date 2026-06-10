@@ -141,6 +141,20 @@ export const deletePromptForOverwrite = (clientName: string, requestId: number) 
 export const resetInProgressPrompts = () =>
   dbClient.update(prompts).set({ status: 'queued' }).where(eq(prompts.status, 'in_progress'));
 
+export const purgeCompletedPrompts = async (olderThanDays: number, clientName?: string): Promise<number> => {
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+  const result = await dbClient
+    .delete(prompts)
+    .where(
+      and(
+        inArray(prompts.status, ['completed', 'failed']),
+        lte(prompts.completedAt, cutoff),
+        clientName ? eq(prompts.clientName, clientName) : undefined
+      )
+    );
+  return result.changes;
+};
+
 export const countQueuedPrompts = async () => {
   const [row] = await dbClient
     .select({ count: count() })
