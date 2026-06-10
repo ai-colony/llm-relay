@@ -67,6 +67,17 @@ describe('POST /prompt/add', () => {
     expect(body.success).toBe(false);
   });
 
+  it('accepts an optional priority field', async () => {
+    vi.mocked(createPrompt).mockResolvedValue(1);
+    const response = await postJson({ ...validBody, priority: 3 });
+    expect(response.status).toBe(201);
+  });
+
+  it('returns 400 when priority is negative', async () => {
+    const response = await postJson({ ...validBody, priority: -1 });
+    expect(response.status).toBe(400);
+  });
+
   it('accepts an optional callbackUrl and systemPrompt', async () => {
     vi.mocked(createPrompt).mockResolvedValue(1);
     const response = await postJson({

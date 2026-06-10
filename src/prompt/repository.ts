@@ -15,8 +15,9 @@ export const addPrompt = async (prompt: {
   systemPrompt?: string;
   userPrompt: string;
   temperature: number;
+  priority?: number;
 }) => {
-  const { clientName, requestId, callbackUrl, systemPrompt, userPrompt, temperature } = prompt;
+  const { clientName, requestId, callbackUrl, systemPrompt, userPrompt, temperature, priority = 0 } = prompt;
   const result = await dbClient.insert(prompts).values({
     clientName,
     requestId,
@@ -30,7 +31,8 @@ export const addPrompt = async (prompt: {
 
     systemPrompt,
     userPrompt,
-    temperature
+    temperature,
+    priority
   });
   return result.lastInsertRowid;
 };
@@ -46,7 +48,7 @@ export const findFirstQueuedPrompt = () =>
         or(isNull(prompts.nextRetryAt), lte(prompts.nextRetryAt, new Date()))
       )
     )
-    .orderBy(prompts.createdAt)
+    .orderBy(prompts.priority, prompts.createdAt)
     .limit(1)
     .then(([row]) => row);
 
