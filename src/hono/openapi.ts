@@ -34,6 +34,19 @@ const spec = {
         }
       }
     },
+    '/metrics': {
+      get: {
+        operationId: 'getMetrics',
+        summary: 'Prometheus metrics',
+        description: 'Returns queue depths, processing rates, and error counts in Prometheus text exposition format.',
+        responses: {
+          '200': {
+            description: 'OK',
+            content: { 'text/plain': { schema: { type: 'string' } } }
+          }
+        }
+      }
+    },
     '/status': {
       get: {
         operationId: 'getStatus',
