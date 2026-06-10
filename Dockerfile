@@ -5,7 +5,7 @@ ARG NODE_IMAGE=node:24.16.0-alpine3.23
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
-COPY package.json package-lock.json drizzle.config.ts .
+COPY package.json package-lock.json drizzle.config.ts .npmrc .
 RUN apk add --no-cache python3 make g++ && npm ci
 COPY . .
 RUN node --run build
