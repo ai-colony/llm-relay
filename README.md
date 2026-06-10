@@ -84,7 +84,7 @@ The `openai` completion log includes inference performance metrics useful for mo
 
 ### Docker
 
-Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.3.0`.
+Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.3.1`.
 
 Minimal — only the upstream URL needs to be set; everything else has a sensible default:
 
@@ -94,7 +94,7 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.3.0
+  ghcr.io/ai-colony/llm-relay:1.3.1
 ```
 
 Full — all available environment variables:
@@ -110,7 +110,7 @@ docker run -d --rm \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.3.0
+  ghcr.io/ai-colony/llm-relay:1.3.1
 ```
 
 Key points:
@@ -208,7 +208,7 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.3.0",
+  "version": "1.3.1",
   "uptime": 42,
   "queued": 3,
   "pending": 1,
@@ -373,6 +373,7 @@ type ListPromptsQuery = z.infer<typeof ListPromptsQuery>;
 
 const ListPromptsResponse = z.array(
   z.object({
+    priority: z.number().int().min(0),
     id: z.number().int(),
     clientName: z.string(),
     requestId: z.number().int(),
@@ -396,6 +397,32 @@ const ListPromptsResponse = z.array(
   })
 );
 type ListPromptsResponse = z.infer<typeof ListPromptsResponse>;
+```
+
+### `DELETE /prompt/purge?days=&clientName=`
+
+Bulk-delete `completed` and `failed` prompts older than `days` days (default `7`). `clientName` is optional; omitting it purges across all clients.
+
+```typescript
+import { z } from 'zod';
+
+const PurgePromptsQuery = z.object({
+  days: z.coerce.number().int().min(1).optional().default(7),
+  clientName: z.string().optional()
+});
+type PurgePromptsQuery = z.infer<typeof PurgePromptsQuery>;
+
+const PurgePromptsResponse = z.object({
+  success: z.literal(true),
+  deleted: z.number().int()
+});
+type PurgePromptsResponse = z.infer<typeof PurgePromptsResponse>;
+```
+
+**Response `200`:**
+
+```json
+{ "success": true, "deleted": 42 }
 ```
 
 ### `DELETE /prompt/cancel?clientName=&requestId=`
@@ -425,7 +452,7 @@ queued → in_progress → completed
                      → failed_retry    (re-queued, retried indefinitely)
 ```
 
-Transient errors (network timeouts, connection resets, `AbortError`, etc.) trigger `failed_retry` with an exponential backoff delay (`2^retryCount × 1 s`, capped at 60 s). There is no retry limit — transient errors are retried indefinitely. Hard failures (e.g. model not found) go straight to `failed`.
+Transient errors (network timeouts, connection resets, `AbortError`, etc.) trigger `failed_retry` with an exponential backoff delay (`2^retryCount × 1 s`, capped at 60 s). After `OPENAI_MAX_RETRY_COUNT` attempts (default `10`) the prompt transitions to `failed` with `statusError: "max_retries_exceeded"`. Hard failures (e.g. model not found) go straight to `failed` immediately.
 
 On startup, any prompts stuck in `in_progress` from a previous unclean shutdown are automatically reset to `queued`.
 

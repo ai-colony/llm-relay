@@ -122,6 +122,24 @@ const spec = {
         }
       }
     },
+    '/prompt/purge': {
+      delete: {
+        operationId: 'purgePrompts',
+        summary: 'Purge old completed and failed prompts',
+        description:
+          'Deletes completed and failed prompts older than the given number of days. Optionally scoped to a single client.',
+        parameters: [
+          { name: 'clientName', in: 'query', required: false, schema: { type: 'string' } },
+          { name: 'days', in: 'query', required: false, schema: { type: 'integer', minimum: 1, default: 7 } }
+        ],
+        responses: {
+          '200': {
+            description: 'Purge complete',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/PurgeResponse' } } }
+          }
+        }
+      }
+    },
     '/prompt/cancel': {
       delete: {
         operationId: 'cancelPrompt',
@@ -203,6 +221,12 @@ const spec = {
           systemPrompt: { type: 'string' },
           userPrompt: { type: 'string', minLength: 1 },
           temperature: { type: 'number', minimum: 0, maximum: 2 },
+          priority: {
+            type: 'integer',
+            minimum: 0,
+            default: 0,
+            description: 'Lower value = higher priority (processed first)'
+          },
           overwrite: { type: 'boolean', default: false, description: 'Replace existing non-in-progress prompt' }
         },
         required: ['clientName', 'requestId', 'userPrompt', 'temperature']
@@ -271,12 +295,21 @@ const spec = {
       PromptListItem: {
         type: 'object',
         properties: {
+          priority: { type: 'integer', minimum: 0 },
           requestId: { type: 'integer' },
           status: { $ref: '#/components/schemas/PromptStatus' },
           createdAt: { type: 'string', format: 'date-time' },
           completedAt: { type: ['string', 'null'], format: 'date-time' }
         },
-        required: ['requestId', 'status', 'createdAt', 'completedAt']
+        required: ['priority', 'requestId', 'status', 'createdAt', 'completedAt']
+      },
+      PurgeResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', const: true },
+          deleted: { type: 'integer', description: 'Number of records deleted' }
+        },
+        required: ['success', 'deleted']
       }
     }
   }

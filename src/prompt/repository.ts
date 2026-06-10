@@ -108,6 +108,7 @@ export const findPromptByClientNameAndRequestId = (clientName: string, requestId
 export const findPromptsByClientName = (clientName: string, status?: PromptStatus, limit = 500) =>
   dbClient
     .select({
+      priority: prompts.priority,
       requestId: prompts.requestId,
       status: prompts.status,
       createdAt: prompts.createdAt,
