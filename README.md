@@ -12,7 +12,7 @@ An HTTP relay server that queues LLM prompts, executes them serially against any
 
 ## Why
 
-Local or self-hosted LLMs (e.g. llama.cpp, Ollama, vLLM) typically handle only a few requests at a time. `llm-relay` sits in front of the model and serializes concurrent requests into a FIFO queue backed by SQLite, so callers never have to manage back-pressure themselves. Clients can either poll for results or receive them via a push callback.
+Local or self-hosted LLMs (e.g. llama.cpp, Ollama, vLLM) typically handle only a few requests at a time. `llm-relay` sits in front of the model and serializes concurrent requests into a priority queue backed by SQLite, so callers never have to manage back-pressure themselves. Clients can either poll for results or receive them via a push callback.
 
 ## Infrastructure requirements
 
@@ -29,15 +29,17 @@ cp .env.example .env   # then edit .env
 
 ### Environment variables
 
-| Variable            | Default                    | Description                                                         |
-| ------------------- | -------------------------- | ------------------------------------------------------------------- |
-| `PORT`              | `3000`                     | HTTP port the relay listens on                                      |
-| `LOG_LEVEL`         | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`)          |
-| `DATABASE_FILENAME` | `./database.sqlite`        | Path to the SQLite database file                                    |
-| `OPENAI_URL`        | `http://localhost:8080/v1` | Base URL of the OpenAI-compatible API                               |
-| `OPENAI_MODEL`      | _(first available model)_  | Model name to use; if empty, the first model from `/models` is used |
-| `OPENAI_KEY`        | `none`                     | API key (use `none` for local servers that don't require one)       |
-| `OPENAI_TIMEOUT`    | `10000`                    | Per-request timeout in milliseconds                                 |
+| Variable                 | Default                    | Description                                                                                                                              |
+| ------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                   | `3000`                     | HTTP port the relay listens on                                                                                                           |
+| `API_KEY`                | _(empty)_                  | When set, all `/prompt` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, and `GET /metrics` remain public. |
+| `LOG_LEVEL`              | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`)                                                                               |
+| `DATABASE_FILENAME`      | `./database.sqlite`        | Path to the SQLite database file                                                                                                         |
+| `OPENAI_URL`             | `http://localhost:8080/v1` | Base URL of the OpenAI-compatible API                                                                                                    |
+| `OPENAI_MODEL`           | _(first available model)_  | Model name to use; if empty, the first model from `/models` is used                                                                      |
+| `OPENAI_KEY`             | `none`                     | API key (use `none` for local servers that don't require one)                                                                            |
+| `OPENAI_TIMEOUT`         | `10000`                    | Per-request timeout in milliseconds                                                                                                      |
+| `OPENAI_MAX_RETRY_COUNT` | `10`                       | Maximum number of transient-error retries before a prompt is permanently failed with `statusError: "max_retries_exceeded"`               |
 
 ## Running
 
@@ -82,7 +84,7 @@ The `openai` completion log includes inference performance metrics useful for mo
 
 ### Docker
 
-Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.2.1`.
+Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.3.0`.
 
 Minimal — only the upstream URL needs to be set; everything else has a sensible default:
 
@@ -92,7 +94,7 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.2.1
+  ghcr.io/ai-colony/llm-relay:1.3.0
 ```
 
 Full — all available environment variables:
@@ -108,7 +110,7 @@ docker run -d --rm \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.2.1
+  ghcr.io/ai-colony/llm-relay:1.3.0
 ```
 
 Key points:
@@ -206,7 +208,7 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.2.1",
+  "version": "1.3.0",
   "uptime": 42,
   "queued": 3,
   "pending": 1,
@@ -244,6 +246,7 @@ Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submi
   "userPrompt": "What is the capital of France?",
   "systemPrompt": "You are a geography expert.",
   "temperature": 0.7,
+  "priority": 0,
   "callbackUrl": "https://my-app.example.com/llm-callback",
   "overwrite": false
 }
@@ -256,6 +259,7 @@ Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submi
 | `userPrompt`   | string  | yes      | The user turn of the conversation                                                                                                                                                                                                                |
 | `systemPrompt` | string  | no       | Optional system prompt                                                                                                                                                                                                                           |
 | `temperature`  | float   | yes      | Sampling temperature, `0`–`2`                                                                                                                                                                                                                    |
+| `priority`     | integer | no       | Default `0`. Lower values are processed first; ties broken by creation time. Use higher values (e.g. `10`) for background batch jobs so interactive requests at `0` skip ahead.                                                                  |
 | `callbackUrl`  | URL     | no       | If provided, the relay POSTs the result here when done                                                                                                                                                                                           |
 | `overwrite`    | boolean | no       | Default `false`. When `true`, deletes any existing prompt with the same `clientName + requestId` before adding. Only valid for statuses `queued`, `completed`, `failed`, `failed_retry` — returns `409` if the existing prompt is `in_progress`. |
 
@@ -268,6 +272,7 @@ const AddPromptBody = z.object({
   userPrompt: z.string().min(1),
   systemPrompt: z.string().optional(),
   temperature: z.number().min(0).max(2),
+  priority: z.number().int().min(0).optional().default(0),
   callbackUrl: z.string().url().optional(),
   overwrite: z.boolean().optional().default(false)
 });
