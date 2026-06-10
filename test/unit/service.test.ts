@@ -1,6 +1,7 @@
 vi.mock('@lib', () => ({
   executeOpenAIPrompt: vi.fn(),
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
+  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+  config: { openai: { maxRetryCount: 10 } }
 }));
 
 vi.mock('../../src/prompt/repository', () => ({
@@ -87,13 +88,22 @@ describe('processQueuedPrompts', () => {
     expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'fetch failed', true, expect.any(Date));
   });
 
-  it('keeps retrying transient errors indefinitely (no retry limit)', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 10 }));
+  it('retries a transient error that is still under the retry cap', async () => {
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 8 }));
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('econnreset'));
 
     await processQueuedPrompts();
 
     expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'econnreset', true, expect.any(Date));
+  });
+
+  it('moves to permanently failed with max_retries_exceeded when the retry cap is reached', async () => {
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 9 }));
+    vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
+
+    await processQueuedPrompts();
+
+    expect(updatePromptSetFailed).toHaveBeenCalledWith(1, 'max_retries_exceeded', false, undefined);
   });
 
   it('marks the prompt as permanently failed for non-transient errors regardless of retry count', async () => {
@@ -150,7 +160,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('caps the retry backoff at 60 s for very large retry counts', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 100 }));
+    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 8 }));
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
 
     const before = Date.now();

@@ -19,6 +19,7 @@ sqlite.exec(`
     systemPrompt TEXT,
     userPrompt TEXT NOT NULL,
     temperature REAL NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 0,
     retryCount INTEGER NOT NULL,
     nextRetryAt INTEGER,
     reasoning TEXT,
@@ -31,14 +32,12 @@ sqlite.exec(`
 `);
 sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_prompts_client_request ON prompts (clientName, requestId)');
 sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_callback ON prompts (callbackCompleted, status, callbackUrl)');
-sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_status_created ON prompts (status, createdAt)');
+sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_status_priority_created ON prompts (status, priority, createdAt)');
 sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_client_created ON prompts (clientName, createdAt)');
 
 export const testSqlite = sqlite;
 export const testDbClient = drizzle({ client: sqlite, schema });
 
-export function clearDatabase() {
-  sqlite.exec('DELETE FROM prompts');
-}
+export const clearDatabase = () => sqlite.exec('DELETE FROM prompts');
 
 export { schema as testDbSchema } from '../../src/db/schema';

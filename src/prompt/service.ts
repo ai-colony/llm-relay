@@ -1,4 +1,4 @@
-import { executeOpenAIPrompt, logger } from '@lib';
+import { config, executeOpenAIPrompt, logger } from '@lib';
 
 import {
   findCallbackPendingPrompts,
@@ -103,9 +103,15 @@ export const processQueuedPrompts = async () => {
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const retryable = isTransientError(error);
+    const transient = isTransientError(error);
+    const retryable = transient && prompt.retryCount + 1 < config.openai.maxRetryCount;
     const nextRetryAt = retryable ? computeNextRetryAt(prompt.retryCount + 1) : undefined;
-    await updatePromptSetFailed(prompt.id, errorMessage, retryable, nextRetryAt);
+    await updatePromptSetFailed(
+      prompt.id,
+      transient && !retryable ? 'max_retries_exceeded' : errorMessage,
+      retryable,
+      nextRetryAt
+    );
     logger.error(
       {
         component: 'worker',

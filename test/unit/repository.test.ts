@@ -76,6 +76,13 @@ describe('findFirstQueuedPrompt', () => {
     expect(result?.requestId).toBe(1);
   });
 
+  it('returns the lower-priority-number prompt first regardless of insertion order', async () => {
+    await addPrompt({ ...basePrompt, requestId: 1, priority: 5 });
+    await addPrompt({ ...basePrompt, requestId: 2, priority: 1 });
+    const result = await findFirstQueuedPrompt();
+    expect(result?.requestId).toBe(2);
+  });
+
   it('returns failed_retry prompts as eligible for processing', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptSetFailed(Number(id), 'timeout', true);

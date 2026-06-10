@@ -13,11 +13,11 @@ export const database = {
   dbSchema: schema
 };
 
-export function checkDatabase(): { ok: boolean; error?: string } {
+export const checkDatabase = (): { ok: boolean; error?: string } => {
   try {
     client.run(sql`SELECT 1`);
     return { ok: true };
   } catch (error) {
     return { ok: false, error: String(error) };
   }
-}
+};

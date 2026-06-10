@@ -11,6 +11,7 @@ const BodySchema = z.object({
   systemPrompt: z.string().optional(),
   userPrompt: z.string().min(1),
   temperature: z.number().min(0).max(2),
+  priority: z.number().int().min(0).optional().default(0),
   overwrite: z.boolean().optional().default(false)
 });
 

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-10
+
+### Added
+
+- **API key authentication**: all endpoints are now optionally protected by a Bearer token. Set `API_KEY` in the environment; when set, every request must include `Authorization: Bearer <key>`. Requests without or with the wrong key receive `401`. When `API_KEY` is empty the middleware is bypassed (no breaking change for open deployments).
+- **Prometheus metrics**: new `GET /metrics` endpoint returns prompt queue gauges (`llm_relay_prompts_queued`, `llm_relay_prompts_pending`, `llm_relay_prompts_completed_total`, `llm_relay_prompts_failed_total`, `llm_relay_callbacks_pending`) and `llm_relay_uptime_seconds` in the standard text exposition format.
+- **Purge endpoint**: `DELETE /prompt/purge?days=7&clientName=` bulk-deletes `completed` and `failed` prompts older than the given number of days. `clientName` is optional; omitting it purges across all clients. Returns `{ "success": true, "deleted": <count> }`.
+- **Max retry limit**: transient errors are now retried at most `OPENAI_MAX_RETRY_COUNT` times (default `10`). After the limit is reached the prompt transitions to `failed` with `statusError: "max_retries_exceeded"` instead of retrying indefinitely.
+- **Priority queue**: `POST /prompt/add` now accepts an optional `priority` integer (default `0`). Lower values are processed first; ties are broken by creation time (FIFO). Enables interactive requests to skip ahead of background batch jobs without a separate queue.
+
+### Fixed
+
+- **`GET /prompt/get` 404 response**: documented the `{ "success": false, "error": "Prompt not found" }` response shape that was already returned but missing from the README.
+
+### Changed
+
+- Bumped `hono` to `4.12.25`, `@typescript-eslint/*` to `8.61.0`, `eslint-plugin-unicorn` to `65.0.1`, `prettier` to `3.8.4`.
+
 ## [1.2.1] - 2026-06-08
 
 ### Fixed
@@ -39,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
-[Unreleased]: https://github.com/BCsabaEngine/llm-relay/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/BCsabaEngine/llm-relay/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/BCsabaEngine/llm-relay/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/BCsabaEngine/llm-relay/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/BCsabaEngine/llm-relay/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/BCsabaEngine/llm-relay/compare/v1.0.0...v1.1.0

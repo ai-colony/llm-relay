@@ -19,6 +19,7 @@ export const prompts = sqliteTable(
     systemPrompt: text(),
     userPrompt: text().notNull(),
     temperature: real().notNull(),
+    priority: integer().notNull().default(0),
 
     retryCount: integer().notNull(),
     nextRetryAt: integer({ mode: 'timestamp' }),
@@ -32,7 +33,7 @@ export const prompts = sqliteTable(
   },
   (t) => [
     index('idx_prompts_callback').on(t.status, t.callbackCompleted, t.callbackUrl),
-    index('idx_prompts_status_created').on(t.status, t.createdAt),
+    index('idx_prompts_status_priority_created').on(t.status, t.priority, t.createdAt),
     index('idx_prompts_client_created').on(t.clientName, t.createdAt),
     uniqueIndex('idx_prompts_client_request').on(t.clientName, t.requestId)
   ]
