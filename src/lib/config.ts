@@ -8,7 +8,8 @@ export const config = {
     level: envVar.get('LOG_LEVEL').default('info').asString()
   },
   http: {
-    port: envVar.get('PORT').default(3000).asInt()
+    port: envVar.get('PORT').default(3000).asInt(),
+    apiKey: envVar.get('API_KEY').default('').asString()
   },
   database: {
     filename: envVar.get('DATABASE_FILENAME').default('./database.sqlite').asString()

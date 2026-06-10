@@ -1,12 +1,15 @@
 import { structuredLogger } from '@hono/structured-logger';
-import { logger } from '@lib';
+import { config, logger } from '@lib';
 import { Hono } from 'hono';
 
+import { createAuthMiddleware } from './auth';
 import { health } from './health';
 import { metrics } from './metrics';
 import { openapi } from './openapi';
 import { prompt } from './prompt';
 import { status } from './status';
+
+const auth = createAuthMiddleware(config.http.apiKey);
 
 export const app = new Hono()
   .onError((error, c) => {
@@ -24,6 +27,7 @@ export const app = new Hono()
         )
     })
   )
+  .use('/prompt/*', auth)
   .route('/', openapi)
   .route('/health', health)
   .route('/metrics', metrics)
