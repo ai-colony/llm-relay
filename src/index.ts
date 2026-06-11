@@ -3,7 +3,7 @@ import { serve } from '@hono/node-server';
 import { config, logger } from '@lib';
 import { getPromptStatusCounts, resetInProgressPrompts } from '@prompt/repository';
 import { processCallbackPendingPrompts, processQueuedPrompts } from '@prompt/service';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { migrate } from 'drizzle-orm/node-sqlite/migrator';
 
 import { app } from './hono';
 

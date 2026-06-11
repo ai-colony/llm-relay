@@ -6,10 +6,9 @@ FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json drizzle.config.ts .npmrc .
-RUN apk add --no-cache python3 make g++ && npm ci
+RUN npm ci
 COPY . .
 RUN node --run build
-RUN npm prune --omit=dev
 
 
 # Runner
@@ -17,12 +16,9 @@ FROM ${NODE_IMAGE} AS runner
 RUN apk upgrade -U
 WORKDIR /app
 
-COPY --chown=node:node package.json .
-COPY --chown=node:node --from=builder /app/node_modules ./node_modules
-RUN npm r -g npm
-
 COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/drizzle ./drizzle
+RUN npm r -g npm
 
 ENV DATABASE_FILENAME=/app/data/database.sqlite
 RUN mkdir -p /app/data && chown node:node /app/data
@@ -35,4 +31,4 @@ USER node
 VOLUME ["/app/data"]
 EXPOSE 3000
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--no-warnings=ExperimentalWarning", "dist/index.js"]

@@ -1,9 +1,10 @@
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
+
+import { drizzle } from 'drizzle-orm/node-sqlite';
 
 import { schema } from '../../src/db/schema';
 
-const sqlite = new Database(':memory:');
+const sqlite = new DatabaseSync(':memory:');
 
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS prompts (

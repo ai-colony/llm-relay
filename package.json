@@ -12,10 +12,10 @@
   "scripts": {
     "dev": "nodemon --exec tsx ./src/index.ts | ./node_modules/.bin/pino-pretty -i time,host,pid,traceId,sessionId,userId -S",
     "dev-raw": "nodemon --exec tsx ./src/index.ts",
-    "start": "node dist/index.js",
+    "start": "node --no-warnings=ExperimentalWarning dist/index.js",
     "run": "tsx ./src/index.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsup src/index.ts  --out-dir dist --format esm --clean --treeshake --no-splitting --minify",
+    "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -57,7 +57,6 @@
   "homepage": "https://github.com/ai-colony/llm-relay#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
@@ -81,7 +80,6 @@
     "@hono/node-server": "^2.0.4",
     "@hono/structured-logger": "^0.1.0",
     "@hono/zod-validator": "^0.8.0",
-    "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^1.0.0-beta.22",
     "env-var": "^7.5.0",

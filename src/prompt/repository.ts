@@ -155,7 +155,7 @@ export const purgeCompletedPrompts = async (olderThanDays: number, clientName?: 
         clientName ? eq(prompts.clientName, clientName) : undefined
       )
     );
-  return result.changes;
+  return Number(result.changes);
 };
 
 export const countQueuedPrompts = async () => {
