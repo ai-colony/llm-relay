@@ -84,7 +84,7 @@ The `openai` completion log includes inference performance metrics useful for mo
 
 ### Docker
 
-Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.3.1`.
+Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.4.0`.
 
 Minimal — only the upstream URL needs to be set; everything else has a sensible default:
 
@@ -94,7 +94,7 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.3.1
+  ghcr.io/ai-colony/llm-relay:1.4.0
 ```
 
 Full — all available environment variables:
@@ -110,7 +110,7 @@ docker run -d --rm \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.3.1
+  ghcr.io/ai-colony/llm-relay:1.4.0
 ```
 
 Key points:
@@ -119,15 +119,6 @@ Key points:
 - **`--rm`**: removes the stopped container automatically; the named volume `llm-relay-data` is unaffected, so your data is safe.
 - **Network**: uses `host.docker.internal` to reach a local LLM server. On Linux with bridge networking replace it with the host gateway IP, or use `--network host` and `OPENAI_URL=http://localhost:8080/v1` instead.
 - **Port**: the relay listens on `PORT` (default `3000`). The `-p 3000:3000` flag exposes it from the container.
-
-#### docker compose
-
-```bash
-# Copy and edit the compose environment, then:
-docker compose up -d
-```
-
-The bundled `docker-compose.yml` uses `host.docker.internal` as the upstream host so it works on Docker Desktop (Mac/Windows). On Linux with bridge networking replace it with the host gateway IP, or switch the service to `network_mode: host`.
 
 #### npm helper scripts
 
@@ -141,58 +132,16 @@ These scripts read `OPENAI_*` and other variables from `.env.docker` (create it 
 
 ### From source
 
-Service definition files for Linux (systemd) and macOS (launchd) live in `infra/`.
-
 ```bash
 git clone https://github.com/BCsabaEngine/llm-relay /opt/llm-relay
 cd /opt/llm-relay
-npm ci --omit=dev
+npm install
 npm run build
 cp .env.example .env   # then edit .env
+node --no-warnings=ExperimentalWarning dist/index.js
 ```
 
-### Linux — systemd
-
-```bash
-# Create a dedicated system user
-sudo useradd --system --no-create-home llm-relay
-
-# Install the unit file (substitute the actual install path)
-sed "s|/opt/llm-relay|$(pwd)|g" infra/llm-relay.service \
-  | sudo tee /etc/systemd/system/llm-relay.service
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now llm-relay
-
-# Follow logs
-journalctl -u llm-relay -f
-```
-
-### macOS — launchd
-
-```bash
-# Create the log directory
-sudo mkdir -p /var/log/llm-relay
-
-# Install the plist (substitute the actual install path)
-sed "s|/opt/llm-relay|$(pwd)|g" infra/com.llm-relay.plist \
-  | sudo tee /Library/LaunchDaemons/com.llm-relay.plist
-
-sudo launchctl load -w /Library/LaunchDaemons/com.llm-relay.plist
-
-# Follow logs
-tail -f /var/log/llm-relay/llm-relay.log
-```
-
-### Update
-
-```bash
-./infra/update.sh
-
-# then restart:
-sudo systemctl restart llm-relay                      # Linux
-sudo launchctl kickstart -k system/com.llm-relay      # macOS
-```
+The production bundle is fully self-contained — no `node_modules` are needed at runtime alongside `dist/`. Ship `dist/` and `drizzle/` to any server running Node.js 24+.
 
 ## API
 
@@ -208,7 +157,7 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.3.1",
+  "version": "1.4.0",
   "uptime": 42,
   "queued": 3,
   "pending": 1,

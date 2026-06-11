@@ -21,8 +21,6 @@ npm run all          # fix + typecheck + build + test (full pipeline)
 npm run docker:build # Build image tagged llm-relay:<version>
 npm run docker:run   # Run container with --network=host and llm-relay-data volume
 npm run docker:it    # Interactive shell in a fresh container
-# Or use docker-compose.yml (uses inline env vars, no .env.docker needed):
-# docker compose up
 
 # Database schema changes (Drizzle):
 npm run drizzle:push     # Push schema changes directly to the DB (dev)
@@ -88,7 +86,7 @@ SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `n
 
 - **Prettier**: single quotes, 120-char line width, no trailing commas.
 - **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins.
-- **Build**: tsup targets ES2024, outputs ESM to `/dist`.
+- **Build**: tsup (configured via `tsup.config.ts`) targets Node 24, fully bundles all dependencies into a single ESM file at `dist/index.js` — no `node_modules` needed at runtime.
 - **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/`, `@prompt` → `src/prompt/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`). Use the alias when importing from a different folder; use relative imports (`./sibling`) within the same folder.
 
 ## Deployment
