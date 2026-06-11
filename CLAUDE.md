@@ -21,8 +21,6 @@ npm run all          # fix + typecheck + build + test (full pipeline)
 npm run docker:build # Build image tagged llm-relay:<version>
 npm run docker:run   # Run container with --network=host and llm-relay-data volume
 npm run docker:it    # Interactive shell in a fresh container
-# Or use docker-compose.yml (uses inline env vars, no .env.docker needed):
-# docker compose up
 
 # Database schema changes (Drizzle):
 npm run drizzle:push     # Push schema changes directly to the DB (dev)
@@ -73,7 +71,7 @@ Prompt-specific routes each live in their own file under `src/hono/prompt/` and 
 - `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 
 **Data layer** — `src/db/` (aliased as `@db`)  
-SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src/db/schema.ts`. Schema changes are **not** auto-applied — run `npm run drizzle:push` (dev) or generate+migrate (prod) after editing the schema. The `prompts` table enforces a unique index on `(clientName, requestId)` — duplicate pairs are rejected at the DB layer.
+SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `node:sqlite` module. Schema is defined in `src/db/schema.ts`. Schema changes are **not** auto-applied — run `npm run drizzle:push` (dev) or generate+migrate (prod) after editing the schema. The `prompts` table enforces a unique index on `(clientName, requestId)` — duplicate pairs are rejected at the DB layer.
 
 ### Key patterns
 
@@ -88,19 +86,9 @@ SQLite via Drizzle ORM (`drizzle-orm/better-sqlite3`). Schema is defined in `src
 
 - **Prettier**: single quotes, 120-char line width, no trailing commas.
 - **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins.
-- **Build**: tsup targets ES2024, outputs ESM to `/dist`.
+- **Build**: tsup (configured via `tsup.config.ts`) targets Node 24, fully bundles all dependencies into a single ESM file at `dist/index.js` — no `node_modules` needed at runtime.
 - **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/`, `@prompt` → `src/prompt/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`). Use the alias when importing from a different folder; use relative imports (`./sibling`) within the same folder.
 
-## Deployment (infra/)
-
-Service files for running the built app as a managed daemon:
-
-- `infra/llm-relay.service` — systemd unit for Linux; uses `EnvironmentFile=` to load `.env`, runs as a dedicated `llm-relay` system user, restarts on failure.
-- `infra/com.llm-relay.plist` — launchd daemon plist for macOS; calls `infra/start.sh` to source `.env` before starting, keeps the process alive automatically.
-- `infra/start.sh` — env-sourcing wrapper (`set -a; source .env; set +a`) used only by the launchd plist (systemd handles env natively).
-- `infra/update.sh` — cross-platform update script: `git pull && npm ci --omit=dev && npm run build`, then prints the platform-specific restart command.
-- `infra/llama-server-gemma.sh` / `infra/llama-server-qwen.sh` — example commands for starting a local llama.cpp server for Gemma or Qwen models to back the relay.
+## Deployment
 
 On startup, `src/index.ts` auto-applies Drizzle migrations from `./drizzle/` — production deployments must ship that folder alongside `/dist`. It also calls `resetInProgressPrompts()` to recover any prompts stuck as `in_progress` from a previous unclean shutdown.
-
-Both service files use `/opt/llm-relay` as a path placeholder. When installing, pipe through `sed "s|/opt/llm-relay|$(pwd)|g"` before writing to the system location — see the README "Production deployment" section for the exact commands.

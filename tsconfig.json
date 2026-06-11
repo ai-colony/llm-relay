@@ -40,5 +40,5 @@
     }
   },
   "include": ["./src"],
-  "exclude": ["test", "examples"]
+  "exclude": ["test"]
 }

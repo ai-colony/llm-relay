@@ -1,7 +1,21 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
-coverage
 *.tsbuildinfo
+
+# Test & coverage
+coverage
+
+# Database
 *.sqlite
+
+# Environment
 .env
 .env.docker
+
+# macOS
+.DS_Store
+._*
+__MACOSX/

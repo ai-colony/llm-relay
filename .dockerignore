@@ -1,8 +1,37 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
-.env
-.env.*
-*.sqlite
-*.db
+
+# Test & coverage
+test/
 coverage/
 .nyc_output/
+
+# Database
+*.sqlite
+*.db
+
+# Environment
+.env
+.env.*
+
+# Git
+.git/
+.github/
+
+# Dev-only config
+vitest.config.ts
+eslint.config.mjs
+.prettierignore
+.gitignore
+
+# Docs & assets
+*.md
+*.png
+
+# macOS
+.DS_Store
+._*
+__MACOSX/
