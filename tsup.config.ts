@@ -8,7 +8,6 @@ export default defineConfig({
   target: 'node24',
   clean: true,
   treeshake: true,
-  splitting: false,
   minify: true,
   noExternal: [/.*/],
   // CJS packages bundled into ESM need a require() shim

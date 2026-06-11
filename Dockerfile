@@ -5,7 +5,7 @@ ARG NODE_IMAGE=node:24.16.0-alpine3.23
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
-COPY package.json package-lock.json drizzle.config.ts .npmrc .
+COPY package.json package-lock.json .npmrc .
 RUN npm ci
 COPY . .
 RUN node --run build
@@ -13,12 +13,11 @@ RUN node --run build
 
 # Runner
 FROM ${NODE_IMAGE} AS runner
-RUN apk upgrade -U
+RUN apk upgrade -U && npm r -g npm
 WORKDIR /app
 
 COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/drizzle ./drizzle
-RUN npm r -g npm
 
 ENV DATABASE_FILENAME=/app/data/database.sqlite
 RUN mkdir -p /app/data && chown node:node /app/data
