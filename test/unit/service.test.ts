@@ -1,7 +1,11 @@
 vi.mock('@lib', () => ({
   executeOpenAIPrompt: vi.fn(),
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-  config: { openai: { maxRetryCount: 10 }, worker: { concurrency: 1 } }
+  config: {
+    openai: { maxRetryCount: 10 },
+    worker: { concurrency: 1 },
+    callback: { retryTtlHours: 24, hmacSecret: '' }
+  }
 }));
 
 vi.mock('../../src/prompt/repository', () => ({
@@ -13,6 +17,8 @@ vi.mock('../../src/prompt/repository', () => ({
   findCallbackPendingPrompts: vi.fn(),
   updatePromptSetCallbackCompleted: vi.fn()
 }));
+
+import { createHmac } from 'node:crypto';
 
 import { config, executeOpenAIPrompt } from '@lib';
 
@@ -216,6 +222,20 @@ describe('processCallbackPendingPrompts', () => {
     expect(updatePromptSetCallbackCompleted).not.toHaveBeenCalled();
   });
 
+  it('passes a TTL cutoff date to findCallbackPendingPrompts', async () => {
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue([]);
+    const before = Date.now();
+    await processCallbackPendingPrompts();
+    const after = Date.now();
+
+    const [cutoff] = vi.mocked(findCallbackPendingPrompts).mock.calls[0] as [Date];
+    expect(cutoff).toBeInstanceOf(Date);
+    // cutoff should be ~24 hours before now (default retryTtlHours = 24)
+    const expectedMs = 24 * 60 * 60 * 1000;
+    expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(expectedMs - 100);
+    expect(after - cutoff.getTime()).toBeLessThanOrEqual(expectedMs + 100);
+  });
+
   it('sends the callback and marks it as completed on success', async () => {
     const prompt = makeQueuedPrompt({
       status: 'completed',
@@ -253,5 +273,48 @@ describe('processCallbackPendingPrompts', () => {
 
     expect(mockFetch).not.toHaveBeenCalled();
     expect(updatePromptSetCallbackCompleted).not.toHaveBeenCalled();
+  });
+
+  it('does not include X-LLM-Relay-Signature header when hmacSecret is not set', async () => {
+    const prompt = makeQueuedPrompt({
+      status: 'completed',
+      callbackUrl: 'https://example.com/callback',
+      reasoning: 'thought',
+      response: 'answer'
+    });
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', mockFetch);
+    vi.mocked(config).callback = { retryTtlHours: 24, hmacSecret: '' };
+
+    await processCallbackPendingPrompts();
+
+    const headers = mockFetch.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers['X-LLM-Relay-Signature']).toBeUndefined();
+  });
+
+  it('includes a correct X-LLM-Relay-Signature header when hmacSecret is set', async () => {
+    const prompt = makeQueuedPrompt({
+      status: 'completed',
+      callbackUrl: 'https://example.com/callback',
+      reasoning: 'thought',
+      response: 'answer'
+    });
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', mockFetch);
+    vi.mocked(config).callback = { retryTtlHours: 24, hmacSecret: 'mysecret' };
+
+    await processCallbackPendingPrompts();
+
+    const expectedBody = JSON.stringify({
+      clientName: prompt.clientName,
+      requestId: prompt.requestId,
+      reasoning: prompt.reasoning,
+      response: prompt.response
+    });
+    const expectedSig = createHmac('sha256', 'mysecret').update(expectedBody).digest('hex');
+    const headers = mockFetch.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers['X-LLM-Relay-Signature']).toBe(`hmac-sha256=${expectedSig}`);
   });
 });

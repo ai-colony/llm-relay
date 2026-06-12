@@ -1,4 +1,5 @@
 import { zValidator } from '@hono/zod-validator';
+import { checkCallbackAvailability, isCallbackUrlAllowed } from '@lib';
 import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repository';
 import { createPrompt } from '@prompt/service';
 import { Hono } from 'hono';
@@ -7,7 +8,11 @@ import { z } from 'zod';
 const BodySchema = z.object({
   clientName: z.string().min(1),
   requestId: z.string().min(1),
-  callbackUrl: z.string().url().optional(),
+  callbackUrl: z
+    .string()
+    .url()
+    .refine(isCallbackUrlAllowed, { message: 'callbackUrl is not in the allowlist' })
+    .optional(),
   systemPrompt: z.string().optional(),
   userPrompt: z.string().min(1),
   temperature: z.number().min(0).max(2),
@@ -23,6 +28,9 @@ type ResponseSchema = z.infer<typeof ResponseSchema>;
 
 export const add = new Hono().post('/', zValidator('json', BodySchema), async (c) => {
   const data = c.req.valid('json');
+
+  if (data.callbackUrl && !(await checkCallbackAvailability(data.callbackUrl)))
+    return c.json({ success: false, error: 'callbackUrl is not available' }, 503);
 
   if (data.overwrite) {
     const [existing] = await findPromptByClientNameAndRequestId(data.clientName, data.requestId);

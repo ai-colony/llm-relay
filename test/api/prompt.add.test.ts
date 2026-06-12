@@ -8,7 +8,13 @@ vi.mock('../../src/prompt/repository', () => ({
   deletePromptForOverwrite: vi.fn()
 }));
 
+vi.mock('../../src/lib/callbackUrl', () => ({
+  isCallbackUrlAllowed: vi.fn().mockReturnValue(true),
+  checkCallbackAvailability: vi.fn().mockResolvedValue(true)
+}));
+
 import { add } from '../../src/hono/prompt/add';
+import { checkCallbackAvailability, isCallbackUrlAllowed } from '../../src/lib/callbackUrl';
 import {
   countQueuedPrompts,
   deletePromptForOverwrite,
@@ -31,6 +37,8 @@ describe('POST /prompt/add', () => {
     vi.mocked(countQueuedPrompts).mockResolvedValue(1);
     vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([]);
     vi.mocked(deletePromptForOverwrite).mockResolvedValue({ rowsAffected: 1 } as never);
+    vi.mocked(isCallbackUrlAllowed).mockReturnValue(true);
+    vi.mocked(checkCallbackAvailability).mockResolvedValue(true);
   });
 
   it('returns 201 with success true and queue count on valid input', async () => {
@@ -138,6 +146,63 @@ describe('POST /prompt/add', () => {
       );
       const response = await postJson({ ...validBody, overwrite: false });
       expect(response.status).toBe(409);
+    });
+  });
+
+  describe('callbackUrl availability check', () => {
+    beforeEach(() => {
+      vi.mocked(createPrompt).mockResolvedValue(1);
+    });
+
+    it('returns 201 when callbackUrl is available', async () => {
+      vi.mocked(checkCallbackAvailability).mockResolvedValue(true);
+      const response = await postJson({ ...validBody, callbackUrl: 'https://example.com/callback' });
+      expect(response.status).toBe(201);
+    });
+
+    it('returns 503 when callbackUrl is not available', async () => {
+      vi.mocked(checkCallbackAvailability).mockResolvedValue(false);
+      const response = await postJson({ ...validBody, callbackUrl: 'https://example.com/callback' });
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body.success).toBe(false);
+      expect(body.error).toBe('callbackUrl is not available');
+    });
+
+    it('skips availability check when no callbackUrl provided', async () => {
+      const response = await postJson(validBody);
+      expect(response.status).toBe(201);
+      expect(vi.mocked(checkCallbackAvailability)).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('callbackUrl allowlist', () => {
+    beforeEach(() => {
+      vi.mocked(createPrompt).mockResolvedValue(1);
+    });
+
+    it('accepts any valid URL when allowlist allows it', async () => {
+      vi.mocked(isCallbackUrlAllowed).mockReturnValue(true);
+      const response = await postJson({ ...validBody, callbackUrl: 'http://localhost/hook' });
+      expect(response.status).toBe(201);
+    });
+
+    it('accepts a URL when allowlist returns true', async () => {
+      vi.mocked(isCallbackUrlAllowed).mockReturnValue(true);
+      const response = await postJson({ ...validBody, callbackUrl: 'https://example.com/callback' });
+      expect(response.status).toBe(201);
+    });
+
+    it('rejects a URL when allowlist returns false', async () => {
+      vi.mocked(isCallbackUrlAllowed).mockReturnValue(false);
+      const response = await postJson({ ...validBody, callbackUrl: 'https://other.com/hook' });
+      expect(response.status).toBe(400);
+    });
+
+    it('rejects a URL when allowlist excludes it', async () => {
+      vi.mocked(isCallbackUrlAllowed).mockReturnValue(false);
+      const response = await postJson({ ...validBody, callbackUrl: 'http://localhost/hook' });
+      expect(response.status).toBe(400);
     });
   });
 });

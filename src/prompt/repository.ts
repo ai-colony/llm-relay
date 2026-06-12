@@ -1,6 +1,6 @@
 import { database } from '@db';
 import { type PromptStatus } from '@db/schema';
-import { and, count, eq, inArray, isNull, lte, not, or, sql } from 'drizzle-orm';
+import { and, count, eq, gt, inArray, isNull, lte, not, or, sql } from 'drizzle-orm';
 
 const {
   dbClient,
@@ -87,11 +87,18 @@ export const updatePromptSetFailed = (id: number, error: string, retryable: bool
     .where(eq(prompts.id, id));
 
 // Handle callback prompts
-export const findCallbackPendingPrompts = () =>
+export const findCallbackPendingPrompts = (cutoff: Date) =>
   dbClient
     .select()
     .from(prompts)
-    .where(and(eq(prompts.status, 'completed'), not(isNull(prompts.callbackUrl)), eq(prompts.callbackCompleted, false)))
+    .where(
+      and(
+        eq(prompts.status, 'completed'),
+        not(isNull(prompts.callbackUrl)),
+        eq(prompts.callbackCompleted, false),
+        gt(prompts.completedAt, cutoff)
+      )
+    )
     .limit(50);
 
 export const updatePromptSetCallbackCompleted = (id: number) =>

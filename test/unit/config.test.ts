@@ -64,4 +64,21 @@ describe('config', () => {
     if (saved === undefined) delete process.env.WORKER_CONCURRENCY;
     else process.env.WORKER_CONCURRENCY = saved;
   });
+
+  it('reads CALLBACK_HMAC_SECRET from the environment', async () => {
+    const saved = process.env.CALLBACK_HMAC_SECRET;
+    process.env.CALLBACK_HMAC_SECRET = 'supersecret';
+    const { config } = await import('../../src/lib/config');
+    expect(config.callback.hmacSecret).toBe('supersecret');
+    if (saved === undefined) delete process.env.CALLBACK_HMAC_SECRET;
+    else process.env.CALLBACK_HMAC_SECRET = saved;
+  });
+
+  it('leaves callback.hmacSecret as empty string when CALLBACK_HMAC_SECRET is not set', async () => {
+    const saved = process.env.CALLBACK_HMAC_SECRET;
+    delete process.env.CALLBACK_HMAC_SECRET;
+    const { config } = await import('../../src/lib/config');
+    expect(config.callback.hmacSecret).toBe('');
+    if (saved !== undefined) process.env.CALLBACK_HMAC_SECRET = saved;
+  });
 });

@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-12
+
 ### Added
 
 - **Configurable concurrency**: new `WORKER_CONCURRENCY` environment variable (default `1`, max `16`). When set above `1`, the worker picks that many queued prompts per tick and processes them in parallel with `Promise.all`. Useful when the upstream LLM supports concurrent requests (e.g. cloud APIs or multi-GPU setups).
+- **Callback URL allowlist** (`CALLBACK_URL_ALLOWLIST`): optional regex environment variable. When set, any `callbackUrl` submitted to `POST /prompt/add` must match the pattern or the request is rejected with `400`. Prevents SSRF against internal hosts.
+- **Callback availability check**: before accepting a prompt with a `callbackUrl`, the relay sends a `GET` probe to that URL (5 s timeout). If the probe fails, `POST /prompt/add` returns `503` with `{ "success": false, "error": "callbackUrl is not available" }`. Catches misconfigured endpoints at submission time.
+- **Callback retry TTL** (`CALLBACK_RETRY_TTL_HOURS`, default `24`): callbacks that have been pending for longer than this many hours are skipped on the next delivery attempt. Prevents stale callbacks from accumulating indefinitely.
+- **Callback HMAC signing** (`CALLBACK_HMAC_SECRET`): when set, each callback POST includes an `X-LLM-Relay-Signature: hmac-sha256=<hex>` header computed with `HMAC-SHA256` over the request body. Lets receivers verify that the request originated from this relay.
 
 ### Changed
 
@@ -85,7 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
-[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/ai-colony/llm-relay/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/ai-colony/llm-relay/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/ai-colony/llm-relay/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/ai-colony/llm-relay/compare/v1.2.1...v1.3.0
