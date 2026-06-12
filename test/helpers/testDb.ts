@@ -10,7 +10,7 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS prompts (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     clientName TEXT NOT NULL,
-    requestId INTEGER NOT NULL,
+    requestId TEXT NOT NULL,
     callbackUrl TEXT,
     callbackCompleted INTEGER NOT NULL,
     createdAt INTEGER NOT NULL,

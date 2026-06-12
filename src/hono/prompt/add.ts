@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 const BodySchema = z.object({
   clientName: z.string().min(1),
-  requestId: z.number().int().positive(),
+  requestId: z.string().min(1),
   callbackUrl: z.string().url().optional(),
   systemPrompt: z.string().optional(),
   userPrompt: z.string().min(1),
