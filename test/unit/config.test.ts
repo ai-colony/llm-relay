@@ -15,7 +15,8 @@ describe('config', () => {
         key: expect.any(String),
         timeout: expect.any(Number),
         maxRetryCount: expect.any(Number)
-      }
+      },
+      worker: { concurrency: expect.any(Number) }
     });
   });
 
@@ -44,5 +45,23 @@ describe('config', () => {
     expect(config.openai.maxRetryCount).toBe(5);
     if (saved === undefined) delete process.env.OPENAI_MAX_RETRY_COUNT;
     else process.env.OPENAI_MAX_RETRY_COUNT = saved;
+  });
+
+  it('reads WORKER_CONCURRENCY from the environment', async () => {
+    const saved = process.env.WORKER_CONCURRENCY;
+    process.env.WORKER_CONCURRENCY = '4';
+    const { config } = await import('../../src/lib/config');
+    expect(config.worker.concurrency).toBe(4);
+    if (saved === undefined) delete process.env.WORKER_CONCURRENCY;
+    else process.env.WORKER_CONCURRENCY = saved;
+  });
+
+  it('clamps WORKER_CONCURRENCY to 16', async () => {
+    const saved = process.env.WORKER_CONCURRENCY;
+    process.env.WORKER_CONCURRENCY = '100';
+    const { config } = await import('../../src/lib/config');
+    expect(config.worker.concurrency).toBe(16);
+    if (saved === undefined) delete process.env.WORKER_CONCURRENCY;
+    else process.env.WORKER_CONCURRENCY = saved;
   });
 });

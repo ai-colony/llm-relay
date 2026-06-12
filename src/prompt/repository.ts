@@ -37,8 +37,8 @@ export const addPrompt = async (prompt: {
   return result.lastInsertRowid;
 };
 
-// Find the first prompt that is queued or failed but retryable, ordered by creation time
-export const findFirstQueuedPrompt = () =>
+// Find prompts that are queued or failed but retryable, ordered by priority then creation time
+export const findQueuedPrompts = (limit: number) =>
   dbClient
     .select()
     .from(prompts)
@@ -49,12 +49,11 @@ export const findFirstQueuedPrompt = () =>
       )
     )
     .orderBy(prompts.priority, prompts.createdAt)
-    .limit(1)
-    .then(([row]) => row);
+    .limit(limit);
 
 // Update prompts
-export const updatePromptSetInProgress = (id: number) =>
-  dbClient.update(prompts).set({ status: 'in_progress' }).where(eq(prompts.id, id));
+export const updatePromptsSetInProgress = (ids: number[]) =>
+  dbClient.update(prompts).set({ status: 'in_progress' }).where(inArray(prompts.id, ids));
 
 export const updatePromptSetCompleted = (
   id: number,
