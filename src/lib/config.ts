@@ -23,5 +23,16 @@ export const config = {
   },
   worker: {
     concurrency: Math.min(envVar.get('WORKER_CONCURRENCY').default(1).asIntPositive(), 16)
+  },
+  callback: {
+    urlAllowlist: (() => {
+      const raw = envVar.get('CALLBACK_URL_ALLOWLIST').default('').asString();
+      if (!raw) return;
+      try {
+        return new RegExp(raw);
+      } catch {
+        throw new Error(`CALLBACK_URL_ALLOWLIST is not a valid regex: "${raw}"`);
+      }
+    })()
   }
 };

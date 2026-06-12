@@ -1,4 +1,5 @@
 import { zValidator } from '@hono/zod-validator';
+import { isCallbackUrlAllowed } from '@lib';
 import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repository';
 import { createPrompt } from '@prompt/service';
 import { Hono } from 'hono';
@@ -7,7 +8,11 @@ import { z } from 'zod';
 const BodySchema = z.object({
   clientName: z.string().min(1),
   requestId: z.string().min(1),
-  callbackUrl: z.string().url().optional(),
+  callbackUrl: z
+    .string()
+    .url()
+    .refine(isCallbackUrlAllowed, { message: 'callbackUrl is not in the allowlist' })
+    .optional(),
   systemPrompt: z.string().optional(),
   userPrompt: z.string().min(1),
   temperature: z.number().min(0).max(2),

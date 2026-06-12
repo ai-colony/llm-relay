@@ -94,7 +94,7 @@ PRs target `main`. One logical change per PR. Run `npm run all` before opening a
 
 When touching these areas, keep these attack surfaces in mind:
 
-- **`callbackUrl`** — SSRF risk; internal network targets must be blocked.
+- **`callbackUrl`** — SSRF risk; restrict allowed targets with `CALLBACK_URL_ALLOWLIST` (regex).
 - **`API_KEY` / `OPENAI_KEY`** — must never appear in logs, responses, or errors.
 - **`callbackUrl` / `DATABASE_FILENAME`** — path traversal / unintended file exposure.
 - **Auth middleware** — Bearer token check applies only to `/prompt/*`; confirm new routes are mounted correctly.
