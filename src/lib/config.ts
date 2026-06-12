@@ -34,6 +34,7 @@ export const config = {
         throw new Error(`CALLBACK_URL_ALLOWLIST is not a valid regex: "${raw}"`);
       }
     })(),
-    retryTtlHours: envVar.get('CALLBACK_RETRY_TTL_HOURS').default(24).asInt()
+    retryTtlHours: envVar.get('CALLBACK_RETRY_TTL_HOURS').default(24).asInt(),
+    hmacSecret: envVar.get('CALLBACK_HMAC_SECRET').default('').asString()
   }
 };

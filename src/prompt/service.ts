@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import { config, executeOpenAIPrompt, logger } from '@lib';
 
 import {
@@ -31,6 +33,15 @@ const isTransientError = (error: unknown, depth = 0): boolean => {
 
 export { addPrompt as createPrompt } from './repository';
 
+const buildCallbackHeaders = (body: string): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.callback.hmacSecret) {
+    const sig = createHmac('sha256', config.callback.hmacSecret).update(body).digest('hex');
+    headers['X-LLM-Relay-Signature'] = `hmac-sha256=${sig}`;
+  }
+  return headers;
+};
+
 export const processCallbackPendingPrompts = async () => {
   const cutoff = new Date(Date.now() - config.callback.retryTtlHours * 60 * 60 * 1000);
   const pendingPrompts = await findCallbackPendingPrompts(cutoff);
@@ -39,16 +50,17 @@ export const processCallbackPendingPrompts = async () => {
   for (const prompt of pendingPrompts)
     if (prompt.callbackUrl)
       try {
+        const body = JSON.stringify({
+          clientName: prompt.clientName,
+          requestId: prompt.requestId,
+          reasoning: prompt.reasoning,
+          response: prompt.response
+        });
         await fetch(prompt.callbackUrl, {
           signal: AbortSignal.timeout(10_000),
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clientName: prompt.clientName,
-            requestId: prompt.requestId,
-            reasoning: prompt.reasoning,
-            response: prompt.response
-          })
+          headers: buildCallbackHeaders(body),
+          body
         });
         await updatePromptSetCallbackCompleted(prompt.id);
         logger.info(
