@@ -12,7 +12,7 @@ jobs:
     name: Build & Push
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -74,3 +74,27 @@ jobs:
             index:org.opencontainers.image.description=HTTP relay server that queues LLM prompts against OpenAI-compatible APIs with SQLite persistence and async callback delivery
             index:org.opencontainers.image.source=https://github.com/ai-colony/llm-relay
             index:org.opencontainers.image.licenses=ISC
+
+      - name: Configure git for tagging
+        if: env.version_changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract changelog notes
+        if: env.version_changed == 'true'
+        run: |
+          awk "/^## \[${{ env.CURRENT_VERSION }}\]/{flag=1; next} /^## \[/{if(flag) exit} flag" CHANGELOG.md \
+            > /tmp/release_notes.md
+
+      - name: Create git tag and GitHub release
+        if: env.version_changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ env.CURRENT_VERSION }}"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/release_notes.md

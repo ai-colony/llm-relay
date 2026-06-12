@@ -2,7 +2,7 @@
 
 An HTTP relay server that queues LLM prompts, executes them serially against any OpenAI-compatible API, and optionally delivers results to a callback URL.
 
-[Changelog](CHANGELOG.md)
+[Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
 
 <p align="center">
   <img src="llm-relay.png" alt="llm-relay" />
@@ -84,7 +84,22 @@ The `openai` completion log includes inference performance metrics useful for mo
 
 ### Docker
 
-Images are published to GitHub Container Registry as `ghcr.io/ai-colony/llm-relay:1.4.0`.
+Images are published to GitHub Container Registry. A new image is built and pushed on every release (when `package.json` version changes on `main`); check the [releases page](https://github.com/ai-colony/llm-relay/releases) for the current version.
+
+#### Image tags
+
+| Tag                       | Example                                   | When to use                                                            |
+| ------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
+| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.4.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
+| `<image>@sha256:<digest>` | `ghcr.io/ai-colony/llm-relay@sha256:abc…` | Fully reproducible deployments — immune to tag mutation.               |
+
+To find the digest for a given version:
+
+```bash
+docker pull ghcr.io/ai-colony/llm-relay:1.4.0
+docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.4.0
+# ghcr.io/ai-colony/llm-relay@sha256:<digest>
+```
 
 Minimal — only the upstream URL needs to be set; everything else has a sensible default:
 
@@ -455,4 +470,21 @@ curl -s 'http://localhost:3000/prompt/get?clientName=demo&requestId=1'
 
 # 3. Check server status
 curl -s http://localhost:3000/status
+```
+
+## Testing
+
+Tests use [Vitest](https://vitest.dev/) and are split into two categories:
+
+| Directory    | What it tests                                                | External dependencies                              |
+| ------------ | ------------------------------------------------------------ | -------------------------------------------------- |
+| `test/unit/` | Business logic (`config`, `openAI`, `repository`, `service`) | Mocked via `vi.mock`                               |
+| `test/api/`  | Hono route handlers (one file per endpoint)                  | Service/repository layer mocked; no real DB or LLM |
+
+60% coverage is enforced on lines, functions, branches, and statements.
+
+```bash
+npm test                # single run
+npm run test:watch      # watch mode
+npm run test:coverage   # with coverage report
 ```

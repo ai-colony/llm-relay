@@ -82,6 +82,23 @@ SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `n
 - **Logging convention**: all log calls include a `component` field. `info`-level covers lifecycle events (prompt completed, callback sent, model resolved). `debug`-level adds per-request HTTP logs and prompt pick-up events — enable with `LOG_LEVEL=debug`.
 - **Model resolution**: `resolveModel()` in `openAI.ts` queries the upstream API once and caches the result; it selects by `OPENAI_MODEL` env var or falls back to the first available model.
 
+## Branching
+
+- `feat/<name>` — new features
+- `fix/<name>` — bug fixes
+- `chore/<name>` — maintenance, deps, tooling
+
+PRs target `main`. One logical change per PR. Run `npm run all` before opening a PR.
+
+## Security concerns
+
+When touching these areas, keep these attack surfaces in mind:
+
+- **`callbackUrl`** — SSRF risk; internal network targets must be blocked.
+- **`API_KEY` / `OPENAI_KEY`** — must never appear in logs, responses, or errors.
+- **`callbackUrl` / `DATABASE_FILENAME`** — path traversal / unintended file exposure.
+- **Auth middleware** — Bearer token check applies only to `/prompt/*`; confirm new routes are mounted correctly.
+
 ## Tooling notes
 
 - **Prettier**: single quotes, 120-char line width, no trailing commas.
