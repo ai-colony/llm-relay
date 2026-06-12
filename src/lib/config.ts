@@ -33,6 +33,7 @@ export const config = {
       } catch {
         throw new Error(`CALLBACK_URL_ALLOWLIST is not a valid regex: "${raw}"`);
       }
-    })()
+    })(),
+    retryTtlHours: envVar.get('CALLBACK_RETRY_TTL_HOURS').default(24).asInt()
   }
 };

@@ -1,7 +1,7 @@
 vi.mock('@lib', () => ({
   executeOpenAIPrompt: vi.fn(),
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-  config: { openai: { maxRetryCount: 10 }, worker: { concurrency: 1 } }
+  config: { openai: { maxRetryCount: 10 }, worker: { concurrency: 1 }, callback: { retryTtlHours: 24 } }
 }));
 
 vi.mock('../../src/prompt/repository', () => ({
@@ -214,6 +214,20 @@ describe('processCallbackPendingPrompts', () => {
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([]);
     await processCallbackPendingPrompts();
     expect(updatePromptSetCallbackCompleted).not.toHaveBeenCalled();
+  });
+
+  it('passes a TTL cutoff date to findCallbackPendingPrompts', async () => {
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue([]);
+    const before = Date.now();
+    await processCallbackPendingPrompts();
+    const after = Date.now();
+
+    const [cutoff] = vi.mocked(findCallbackPendingPrompts).mock.calls[0] as [Date];
+    expect(cutoff).toBeInstanceOf(Date);
+    // cutoff should be ~24 hours before now (default retryTtlHours = 24)
+    const expectedMs = 24 * 60 * 60 * 1000;
+    expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(expectedMs - 100);
+    expect(after - cutoff.getTime()).toBeLessThanOrEqual(expectedMs + 100);
   });
 
   it('sends the callback and marks it as completed on success', async () => {

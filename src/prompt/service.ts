@@ -32,7 +32,8 @@ const isTransientError = (error: unknown, depth = 0): boolean => {
 export { addPrompt as createPrompt } from './repository';
 
 export const processCallbackPendingPrompts = async () => {
-  const pendingPrompts = await findCallbackPendingPrompts();
+  const cutoff = new Date(Date.now() - config.callback.retryTtlHours * 60 * 60 * 1000);
+  const pendingPrompts = await findCallbackPendingPrompts(cutoff);
   if (pendingPrompts.length === 0) return;
 
   for (const prompt of pendingPrompts)

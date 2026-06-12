@@ -232,7 +232,7 @@ describe('findCallbackPendingPrompts', () => {
     await updatePromptsSetInProgress([Number(idWithoutCallback)]);
     await updatePromptSetCompleted(Number(idWithoutCallback), completionData);
 
-    const pending = await findCallbackPendingPrompts();
+    const pending = await findCallbackPendingPrompts(new Date(0));
     expect(pending).toHaveLength(1);
     expect(pending[0]?.callbackUrl).toBe('https://cb.example.com');
   });
@@ -242,7 +242,7 @@ describe('findCallbackPendingPrompts', () => {
     await updatePromptsSetInProgress([Number(id)]);
     await updatePromptSetCompleted(Number(id), completionData);
     await updatePromptSetCallbackCompleted(Number(id));
-    const pending = await findCallbackPendingPrompts();
+    const pending = await findCallbackPendingPrompts(new Date(0));
     expect(pending).toHaveLength(0);
   });
 });
