@@ -10,7 +10,7 @@ const {
 // Add new prompt to the database
 export const addPrompt = async (prompt: {
   clientName: string;
-  requestId: number;
+  requestId: string;
   callbackUrl?: string;
   systemPrompt?: string;
   userPrompt: string;
@@ -37,8 +37,8 @@ export const addPrompt = async (prompt: {
   return result.lastInsertRowid;
 };
 
-// Find the first prompt that is queued or failed but retryable, ordered by creation time
-export const findFirstQueuedPrompt = () =>
+// Find prompts that are queued or failed but retryable, ordered by priority then creation time
+export const findQueuedPrompts = (limit: number) =>
   dbClient
     .select()
     .from(prompts)
@@ -49,12 +49,11 @@ export const findFirstQueuedPrompt = () =>
       )
     )
     .orderBy(prompts.priority, prompts.createdAt)
-    .limit(1)
-    .then(([row]) => row);
+    .limit(limit);
 
 // Update prompts
-export const updatePromptSetInProgress = (id: number) =>
-  dbClient.update(prompts).set({ status: 'in_progress' }).where(eq(prompts.id, id));
+export const updatePromptsSetInProgress = (ids: number[]) =>
+  dbClient.update(prompts).set({ status: 'in_progress' }).where(inArray(prompts.id, ids));
 
 export const updatePromptSetCompleted = (
   id: number,
@@ -98,7 +97,7 @@ export const findCallbackPendingPrompts = () =>
 export const updatePromptSetCallbackCompleted = (id: number) =>
   dbClient.update(prompts).set({ callbackCompleted: true }).where(eq(prompts.id, id));
 
-export const findPromptByClientNameAndRequestId = (clientName: string, requestId: number) =>
+export const findPromptByClientNameAndRequestId = (clientName: string, requestId: string) =>
   dbClient
     .select()
     .from(prompts)
@@ -119,7 +118,7 @@ export const findPromptsByClientName = (clientName: string, status?: PromptStatu
     .orderBy(prompts.createdAt)
     .limit(limit);
 
-export const deletePromptByClientNameAndRequestId = (clientName: string, requestId: number) =>
+export const deletePromptByClientNameAndRequestId = (clientName: string, requestId: string) =>
   dbClient
     .delete(prompts)
     .where(
@@ -130,7 +129,7 @@ export const deletePromptByClientNameAndRequestId = (clientName: string, request
       )
     );
 
-export const deletePromptForOverwrite = (clientName: string, requestId: number) =>
+export const deletePromptForOverwrite = (clientName: string, requestId: string) =>
   dbClient
     .delete(prompts)
     .where(

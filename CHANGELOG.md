@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Configurable concurrency**: new `WORKER_CONCURRENCY` environment variable (default `1`, max `16`). When set above `1`, the worker picks that many queued prompts per tick and processes them in parallel with `Promise.all`. Useful when the upstream LLM supports concurrent requests (e.g. cloud APIs or multi-GPU setups).
+
+### Changed
+
+- **`requestId` type**: changed from `integer` to `string` across the full stack (DB schema, Zod validation, OpenAPI spec, repository, and callback payload). Clients that previously passed numeric IDs must now pass them as strings.
+
 ## [1.4.0] - 2026-06-11
 
 ### Changed

@@ -87,7 +87,7 @@ const spec = {
         summary: 'Get prompt status and result',
         parameters: [
           { name: 'clientName', in: 'query', required: true, schema: { type: 'string' } },
-          { name: 'requestId', in: 'query', required: true, schema: { type: 'integer', minimum: 1 } }
+          { name: 'requestId', in: 'query', required: true, schema: { type: 'string', minLength: 1 } }
         ],
         responses: {
           '200': {
@@ -147,7 +147,7 @@ const spec = {
         description: 'Deletes the prompt record. Only allowed for queued, failed, and failed_retry statuses.',
         parameters: [
           { name: 'clientName', in: 'query', required: true, schema: { type: 'string' } },
-          { name: 'requestId', in: 'query', required: true, schema: { type: 'integer', minimum: 1 } }
+          { name: 'requestId', in: 'query', required: true, schema: { type: 'string', minLength: 1 } }
         ],
         responses: {
           '200': {
@@ -216,7 +216,7 @@ const spec = {
         type: 'object',
         properties: {
           clientName: { type: 'string', minLength: 1 },
-          requestId: { type: 'integer', minimum: 1 },
+          requestId: { type: 'string', minLength: 1 },
           callbackUrl: { type: 'string', format: 'uri', description: 'POSTed to after the prompt completes' },
           systemPrompt: { type: 'string' },
           userPrompt: { type: 'string', minLength: 1 },
@@ -296,7 +296,7 @@ const spec = {
         type: 'object',
         properties: {
           priority: { type: 'integer', minimum: 0 },
-          requestId: { type: 'integer' },
+          requestId: { type: 'string' },
           status: { $ref: '#/components/schemas/PromptStatus' },
           createdAt: { type: 'string', format: 'date-time' },
           completedAt: { type: ['string', 'null'], format: 'date-time' }

@@ -16,7 +16,7 @@ import {
 } from '../../src/prompt/repository';
 import { createPrompt } from '../../src/prompt/service';
 
-const validBody = { clientName: 'my-client', requestId: 1, userPrompt: 'hello', temperature: 0.7 };
+const validBody = { clientName: 'my-client', requestId: 'req-1', userPrompt: 'hello', temperature: 0.7 };
 
 const postJson = (body: unknown) =>
   add.request('/', {
@@ -44,6 +44,16 @@ describe('POST /prompt/add', () => {
 
   it('returns 400 when required fields are missing', async () => {
     const response = await postJson({ clientName: 'test' });
+    expect(response.status).toBe(400);
+  });
+
+  it('returns 400 when requestId is a number', async () => {
+    const response = await postJson({ ...validBody, requestId: 42 });
+    expect(response.status).toBe(400);
+  });
+
+  it('returns 400 when requestId is an empty string', async () => {
+    const response = await postJson({ ...validBody, requestId: '' });
     expect(response.status).toBe(400);
   });
 

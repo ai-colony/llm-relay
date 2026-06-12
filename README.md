@@ -40,6 +40,7 @@ cp .env.example .env   # then edit .env
 | `OPENAI_KEY`             | `none`                     | API key (use `none` for local servers that don't require one)                                                                            |
 | `OPENAI_TIMEOUT`         | `10000`                    | Per-request timeout in milliseconds                                                                                                      |
 | `OPENAI_MAX_RETRY_COUNT` | `10`                       | Maximum number of transient-error retries before a prompt is permanently failed with `statusError: "max_retries_exceeded"`               |
+| `WORKER_CONCURRENCY`     | `1`                        | Number of prompts processed concurrently per worker tick (capped at `16`). Increase when the upstream LLM supports parallel requests.    |
 
 ## Running
 
@@ -206,7 +207,7 @@ Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submi
 ```json
 {
   "clientName": "my-app",
-  "requestId": 1,
+  "requestId": "req-001",
   "userPrompt": "What is the capital of France?",
   "systemPrompt": "You are a geography expert.",
   "temperature": 0.7,
@@ -219,7 +220,7 @@ Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submi
 | Field          | Type    | Required | Description                                                                                                                                                                                                                                      |
 | -------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `clientName`   | string  | yes      | Logical client identifier; scopes `requestId` uniqueness                                                                                                                                                                                         |
-| `requestId`    | integer | yes      | Client-assigned ID, positive integer                                                                                                                                                                                                             |
+| `requestId`    | string  | yes      | Client-assigned ID, non-empty string                                                                                                                                                                                                             |
 | `userPrompt`   | string  | yes      | The user turn of the conversation                                                                                                                                                                                                                |
 | `systemPrompt` | string  | no       | Optional system prompt                                                                                                                                                                                                                           |
 | `temperature`  | float   | yes      | Sampling temperature, `0`–`2`                                                                                                                                                                                                                    |
@@ -232,7 +233,7 @@ import { z } from 'zod';
 
 const AddPromptBody = z.object({
   clientName: z.string().min(1),
-  requestId: z.number().int().positive(),
+  requestId: z.string().min(1),
   userPrompt: z.string().min(1),
   systemPrompt: z.string().optional(),
   temperature: z.number().min(0).max(2),
@@ -266,7 +267,7 @@ import { z } from 'zod';
 
 const GetPromptQuery = z.object({
   clientName: z.string(),
-  requestId: z.coerce.number().int().positive()
+  requestId: z.string().min(1)
 });
 type GetPromptQuery = z.infer<typeof GetPromptQuery>;
 ```
@@ -340,7 +341,7 @@ const ListPromptsResponse = z.array(
     priority: z.number().int().min(0),
     id: z.number().int(),
     clientName: z.string(),
-    requestId: z.number().int(),
+    requestId: z.string(),
     status: PromptStatus,
     statusError: z.string().nullable(),
     createdAt: z.coerce.date(),
@@ -398,7 +399,7 @@ import { z } from 'zod';
 
 const CancelPromptQuery = z.object({
   clientName: z.string(),
-  requestId: z.coerce.number().int().positive()
+  requestId: z.string().min(1)
 });
 type CancelPromptQuery = z.infer<typeof CancelPromptQuery>;
 
@@ -427,7 +428,7 @@ When a prompt with a `callbackUrl` completes, the relay POSTs the following payl
 ```json
 {
   "clientName": "my-app",
-  "requestId": 1,
+  "requestId": "req-001",
   "reasoning": "...",
   "response": "Paris."
 }
@@ -440,7 +441,7 @@ import { z } from 'zod';
 
 const CallbackPayload = z.object({
   clientName: z.string(),
-  requestId: z.number().int(),
+  requestId: z.string(),
   reasoning: z.string().nullable(),
   response: z.string().nullable()
 });
@@ -455,17 +456,17 @@ curl -s -X POST http://localhost:3000/prompt/add \
   -H 'Content-Type: application/json' \
   -d '{
     "clientName": "demo",
-    "requestId": 1,
+    "requestId": "req-001",
     "userPrompt": "Name three planets.",
     "temperature": 0.5
   }'
 # → {"success":true,"queued":1}
 
 # 2. Poll until completed
-curl -s 'http://localhost:3000/prompt/get?clientName=demo&requestId=1'
+curl -s 'http://localhost:3000/prompt/get?clientName=demo&requestId=req-001'
 # → {"status":"queued"}
 # ... wait a moment ...
-curl -s 'http://localhost:3000/prompt/get?clientName=demo&requestId=1'
+curl -s 'http://localhost:3000/prompt/get?clientName=demo&requestId=req-001'
 # → {"status":"completed","reasoning":null,"response":"Mercury, Venus, Earth.","reasoningTimeMs":null,...}
 
 # 3. Check server status

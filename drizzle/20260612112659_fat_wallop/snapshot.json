@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "bf7b97b1-9c51-494a-94e6-f10316bf571a",
-  "prevIds": ["eda1f4dc-18db-4fc5-9f02-f8467bf9bf32"],
+  "id": "27e7d313-c9bf-4139-8b07-6f61cb40ff39",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "prompts",
@@ -29,7 +29,7 @@
       "table": "prompts"
     },
     {
-      "type": "integer",
+      "type": "text",
       "notNull": true,
       "autoincrement": false,
       "default": null,

@@ -1,28 +1,28 @@
 vi.mock('@lib', () => ({
   executeOpenAIPrompt: vi.fn(),
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-  config: { openai: { maxRetryCount: 10 } }
+  config: { openai: { maxRetryCount: 10 }, worker: { concurrency: 1 } }
 }));
 
 vi.mock('../../src/prompt/repository', () => ({
   addPrompt: vi.fn(),
-  findFirstQueuedPrompt: vi.fn(),
-  updatePromptSetInProgress: vi.fn(),
+  findQueuedPrompts: vi.fn(),
+  updatePromptsSetInProgress: vi.fn(),
   updatePromptSetCompleted: vi.fn(),
   updatePromptSetFailed: vi.fn(),
   findCallbackPendingPrompts: vi.fn(),
   updatePromptSetCallbackCompleted: vi.fn()
 }));
 
-import { executeOpenAIPrompt } from '@lib';
+import { config, executeOpenAIPrompt } from '@lib';
 
 import {
   findCallbackPendingPrompts,
-  findFirstQueuedPrompt,
+  findQueuedPrompts,
   updatePromptSetCallbackCompleted,
   updatePromptSetCompleted,
   updatePromptSetFailed,
-  updatePromptSetInProgress
+  updatePromptsSetInProgress
 } from '../../src/prompt/repository';
 import { processCallbackPendingPrompts, processQueuedPrompts } from '../../src/prompt/service';
 
@@ -58,21 +58,22 @@ const successfulResult = {
 describe('processQueuedPrompts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(config).worker = { concurrency: 1 };
   });
 
   it('does nothing when no prompts are queued', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue();
+    vi.mocked(findQueuedPrompts).mockResolvedValue([]);
     await processQueuedPrompts();
-    expect(updatePromptSetInProgress).not.toHaveBeenCalled();
+    expect(updatePromptsSetInProgress).not.toHaveBeenCalled();
   });
 
   it('marks the prompt completed on successful execution', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
     vi.mocked(executeOpenAIPrompt).mockResolvedValue(successfulResult);
 
     await processQueuedPrompts();
 
-    expect(updatePromptSetInProgress).toHaveBeenCalledWith(1);
+    expect(updatePromptsSetInProgress).toHaveBeenCalledWith([1]);
     expect(updatePromptSetCompleted).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ reasoning: 'thought process', response: 'final answer' })
@@ -80,7 +81,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('marks the prompt as failed_retry on a transient error', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 0 }));
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
 
     await processQueuedPrompts();
@@ -89,7 +90,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('retries a transient error that is still under the retry cap', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 8 }));
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 8 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('econnreset'));
 
     await processQueuedPrompts();
@@ -98,7 +99,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('moves to permanently failed with max_retries_exceeded when the retry cap is reached', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 9 }));
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 9 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
 
     await processQueuedPrompts();
@@ -107,7 +108,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('marks the prompt as permanently failed for non-transient errors regardless of retry count', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 0 }));
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('model not found'));
 
     await processQueuedPrompts();
@@ -116,7 +117,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('converts a non-Error thrown value to a string for the failure message', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue('plain string error');
 
     await processQueuedPrompts();
@@ -127,7 +128,7 @@ describe('processQueuedPrompts', () => {
   it('treats AbortError as transient', async () => {
     const abortError = new Error('aborted');
     abortError.name = 'AbortError';
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 0 }));
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(abortError);
 
     await processQueuedPrompts();
@@ -138,7 +139,7 @@ describe('processQueuedPrompts', () => {
   it.each([['etimedout'], ['econnrefused'], ['socket hang up'], ['network error']])(
     'treats "%s" as a transient error',
     async (message) => {
-      vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
+      vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
       vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error(message));
 
       await processQueuedPrompts();
@@ -151,7 +152,7 @@ describe('processQueuedPrompts', () => {
     const cause = new Error('fetch failed');
     const outer = new Error('wrapped');
     (outer as Error & { cause: unknown }).cause = cause;
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt());
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(outer);
 
     await processQueuedPrompts();
@@ -160,7 +161,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('caps the retry backoff at 60 s for very large retry counts', async () => {
-    vi.mocked(findFirstQueuedPrompt).mockResolvedValue(makeQueuedPrompt({ retryCount: 8 }));
+    vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 8 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
 
     const before = Date.now();
@@ -171,6 +172,35 @@ describe('processQueuedPrompts', () => {
     const nextRetryAtMs = (nextRetryAt as Date).getTime();
     expect(nextRetryAtMs).toBeGreaterThanOrEqual(before + 60_000);
     expect(nextRetryAtMs).toBeLessThanOrEqual(after + 61_000);
+  });
+
+  it('processes multiple prompts concurrently when concurrency > 1', async () => {
+    vi.mocked(config).worker = { concurrency: 2 };
+    const prompt1 = makeQueuedPrompt({ id: 1, requestId: 'req-1' });
+    const prompt2 = makeQueuedPrompt({ id: 2, requestId: 'req-2' });
+    vi.mocked(findQueuedPrompts).mockResolvedValue([prompt1, prompt2]);
+    vi.mocked(executeOpenAIPrompt).mockResolvedValue(successfulResult);
+
+    await processQueuedPrompts();
+
+    expect(findQueuedPrompts).toHaveBeenCalledWith(2);
+    expect(updatePromptsSetInProgress).toHaveBeenCalledWith([1, 2]);
+    expect(updatePromptSetCompleted).toHaveBeenCalledTimes(2);
+  });
+
+  it('processes remaining prompts independently when one fails in a concurrent batch', async () => {
+    vi.mocked(config).worker = { concurrency: 2 };
+    const prompt1 = makeQueuedPrompt({ id: 1, requestId: 'req-1' });
+    const prompt2 = makeQueuedPrompt({ id: 2, requestId: 'req-2' });
+    vi.mocked(findQueuedPrompts).mockResolvedValue([prompt1, prompt2]);
+    vi.mocked(executeOpenAIPrompt)
+      .mockResolvedValueOnce(successfulResult)
+      .mockRejectedValueOnce(new Error('model not found'));
+
+    await processQueuedPrompts();
+
+    expect(updatePromptSetCompleted).toHaveBeenCalledTimes(1);
+    expect(updatePromptSetFailed).toHaveBeenCalledTimes(1);
   });
 });
 

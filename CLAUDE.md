@@ -60,14 +60,14 @@ Prompt-specific routes each live in their own file under `src/hono/prompt/` and 
 
 **Business logic** — `src/prompt/` (aliased as `@prompt`)
 
-- `src/prompt/service.ts` — worker loop functions called by the `setImmediate` loop in `src/index.ts`; processes one queued prompt per tick and handles callback delivery.
+- `src/prompt/service.ts` — worker loop functions called by the `setImmediate` loop in `src/index.ts`; picks up to `config.worker.concurrency` queued prompts per tick, marks them all `in_progress`, then executes them concurrently via `Promise.all`. Also handles callback delivery.
 - `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
 
 **Shared library** — `src/lib/` (aliased as `@lib`)  
 `src/lib/index.ts` is the barrel; it re-exports `config`, `logger`, and `executeOpenAIPrompt`. Add new lib exports there when creating new modules.
 
 - `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics. The "Sending prompt" log includes a `sizes` field with character counts for system and user prompts.
-- `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`, `OPENAI_MAX_RETRY_COUNT`).
+- `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`, `OPENAI_MAX_RETRY_COUNT`, `WORKER_CONCURRENCY`).
 - `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 
 **Data layer** — `src/db/` (aliased as `@db`)  
@@ -75,7 +75,7 @@ SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `n
 
 ### Key patterns
 
-- **Worker loop**: `src/index.ts` uses `setImmediate` + a 100 ms `setTimeout` between iterations to call `processQueuedPrompts` then `processCallbackPendingPrompts`. Each tick processes one queued prompt (lowest `priority` first, FIFO on ties) and up to 50 pending callbacks (FIFO).
+- **Worker loop**: `src/index.ts` uses `setImmediate` + a 100 ms `setTimeout` between iterations to call `processQueuedPrompts` then `processCallbackPendingPrompts`. Each tick fetches up to `WORKER_CONCURRENCY` queued prompts (lowest `priority` first, FIFO on ties), marks them all `in_progress`, then processes them concurrently. Up to 50 callbacks are delivered per tick (FIFO).
 - **Prompt state machine**: `queued` → `in_progress` → `completed | failed | failed_retry`. `failed_retry` is re-picked by the worker after an exponential backoff delay (`2^retryCount * 1s`, capped at 60 s) stored in `nextRetryAt`. After `OPENAI_MAX_RETRY_COUNT` transient failures the prompt moves to `failed` with `statusError: "max_retries_exceeded"`. `failed` is terminal (also used for non-transient errors on first failure).
 - **Async callback**: Each prompt can carry a `callbackUrl`; the relay POSTs the result there after completion. `callbackCompleted` tracks delivery separately from prompt completion.
 - **Streaming metrics**: `openAI.ts` detects the phase boundary between `reasoning_content` and `content` chunks to record separate timings and token rates. A `component: 'openai'` info log is emitted on completion with the full timing breakdown.

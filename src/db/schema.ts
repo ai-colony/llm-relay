@@ -7,7 +7,7 @@ export const prompts = sqliteTable(
   {
     id: integer().primaryKey({ autoIncrement: true }),
     clientName: text().notNull(),
-    requestId: integer().notNull(),
+    requestId: text().notNull(),
     callbackUrl: text(),
     callbackCompleted: integer({ mode: 'boolean' }).notNull(),
 

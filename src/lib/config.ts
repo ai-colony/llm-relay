@@ -20,5 +20,8 @@ export const config = {
     key: envVar.get('OPENAI_KEY').default('none').asString(),
     timeout: envVar.get('OPENAI_TIMEOUT').default(10_000).asInt(),
     maxRetryCount: envVar.get('OPENAI_MAX_RETRY_COUNT').default(10).asInt()
+  },
+  worker: {
+    concurrency: Math.min(envVar.get('WORKER_CONCURRENCY').default(1).asIntPositive(), 16)
   }
 };

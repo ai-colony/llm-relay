@@ -1,6 +1,6 @@
 # Architecture
 
-`llm-relay` is an HTTP relay that decouples clients from a single-threaded LLM backend. Clients enqueue prompts via REST; a worker loop processes them one at a time against an OpenAI-compatible API (e.g. Llama), persists results in SQLite, and optionally POSTs results back to a client-supplied callback URL.
+`llm-relay` is an HTTP relay that decouples clients from an LLM backend. Clients enqueue prompts via REST; a worker loop processes them against an OpenAI-compatible API (e.g. Llama), persists results in SQLite, and optionally POSTs results back to a client-supplied callback URL.
 
 ## System Diagram
 
@@ -39,9 +39,9 @@ Hono-based REST API with Zod request validation. Routes are split by concern: pr
 
 A `setImmediate` loop with a 100 ms pause between iterations. Each tick:
 
-1. Picks the highest-priority queued prompt (lowest `priority` value, FIFO on ties).
-2. Streams the request to the upstream LLM API via the OpenAI SDK.
-3. Stores the result and updates the prompt status (`completed`, `failed`, or `failed_retry`).
+1. Picks up to `WORKER_CONCURRENCY` (default `1`) highest-priority queued prompts (lowest `priority` value, FIFO on ties) and marks them all `in_progress`.
+2. Streams each picked prompt to the upstream LLM API concurrently via the OpenAI SDK.
+3. Stores each result and updates the prompt status (`completed`, `failed`, or `failed_retry`).
 4. On the next pass, delivers pending callbacks (up to 50 per tick).
 
 Failed prompts are retried with exponential backoff (`2^retryCount` seconds, capped at 60 s) until `OPENAI_MAX_RETRY_COUNT` is reached.

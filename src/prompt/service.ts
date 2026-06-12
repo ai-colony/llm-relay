@@ -2,11 +2,11 @@ import { config, executeOpenAIPrompt, logger } from '@lib';
 
 import {
   findCallbackPendingPrompts,
-  findFirstQueuedPrompt,
+  findQueuedPrompts,
   updatePromptSetCallbackCompleted,
   updatePromptSetCompleted,
   updatePromptSetFailed,
-  updatePromptSetInProgress
+  updatePromptsSetInProgress
 } from './repository';
 
 const computeNextRetryAt = (recentRetryCount: number): Date => {
@@ -73,17 +73,8 @@ export const processCallbackPendingPrompts = async () => {
       }
 };
 
-export const processQueuedPrompts = async () => {
-  const prompt = await findFirstQueuedPrompt();
-  if (!prompt) return;
-
+const executePrompt = async (prompt: Awaited<ReturnType<typeof findQueuedPrompts>>[number]) => {
   try {
-    await updatePromptSetInProgress(prompt.id);
-    logger.debug(
-      { component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId },
-      'Prompt picked up'
-    );
-
     const {
       reasoning,
       response,
@@ -124,4 +115,18 @@ export const processQueuedPrompts = async () => {
       'Prompt failed'
     );
   }
+};
+
+export const processQueuedPrompts = async () => {
+  const batch = await findQueuedPrompts(config.worker.concurrency);
+  if (batch.length === 0) return;
+
+  await updatePromptsSetInProgress(batch.map((p) => p.id));
+  for (const prompt of batch)
+    logger.debug(
+      { component: 'worker', clientName: prompt.clientName, requestId: prompt.requestId },
+      'Prompt picked up'
+    );
+
+  await Promise.all(batch.map((prompt) => executePrompt(prompt)));
 };
