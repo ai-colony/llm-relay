@@ -9,11 +9,12 @@ vi.mock('../../src/prompt/repository', () => ({
 }));
 
 vi.mock('../../src/lib/callbackUrl', () => ({
-  isCallbackUrlAllowed: vi.fn().mockReturnValue(true)
+  isCallbackUrlAllowed: vi.fn().mockReturnValue(true),
+  checkCallbackAvailability: vi.fn().mockResolvedValue(true)
 }));
 
 import { add } from '../../src/hono/prompt/add';
-import { isCallbackUrlAllowed } from '../../src/lib/callbackUrl';
+import { checkCallbackAvailability, isCallbackUrlAllowed } from '../../src/lib/callbackUrl';
 import {
   countQueuedPrompts,
   deletePromptForOverwrite,
@@ -37,6 +38,7 @@ describe('POST /prompt/add', () => {
     vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([]);
     vi.mocked(deletePromptForOverwrite).mockResolvedValue({ rowsAffected: 1 } as never);
     vi.mocked(isCallbackUrlAllowed).mockReturnValue(true);
+    vi.mocked(checkCallbackAvailability).mockResolvedValue(true);
   });
 
   it('returns 201 with success true and queue count on valid input', async () => {
@@ -144,6 +146,33 @@ describe('POST /prompt/add', () => {
       );
       const response = await postJson({ ...validBody, overwrite: false });
       expect(response.status).toBe(409);
+    });
+  });
+
+  describe('callbackUrl availability check', () => {
+    beforeEach(() => {
+      vi.mocked(createPrompt).mockResolvedValue(1);
+    });
+
+    it('returns 201 when callbackUrl is available', async () => {
+      vi.mocked(checkCallbackAvailability).mockResolvedValue(true);
+      const response = await postJson({ ...validBody, callbackUrl: 'https://example.com/callback' });
+      expect(response.status).toBe(201);
+    });
+
+    it('returns 503 when callbackUrl is not available', async () => {
+      vi.mocked(checkCallbackAvailability).mockResolvedValue(false);
+      const response = await postJson({ ...validBody, callbackUrl: 'https://example.com/callback' });
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body.success).toBe(false);
+      expect(body.error).toBe('callbackUrl is not available');
+    });
+
+    it('skips availability check when no callbackUrl provided', async () => {
+      const response = await postJson(validBody);
+      expect(response.status).toBe(201);
+      expect(vi.mocked(checkCallbackAvailability)).not.toHaveBeenCalled();
     });
   });
 

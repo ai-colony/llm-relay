@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator';
-import { isCallbackUrlAllowed } from '@lib';
+import { checkCallbackAvailability, isCallbackUrlAllowed } from '@lib';
 import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repository';
 import { createPrompt } from '@prompt/service';
 import { Hono } from 'hono';
@@ -28,6 +28,9 @@ type ResponseSchema = z.infer<typeof ResponseSchema>;
 
 export const add = new Hono().post('/', zValidator('json', BodySchema), async (c) => {
   const data = c.req.valid('json');
+
+  if (data.callbackUrl && !(await checkCallbackAvailability(data.callbackUrl)))
+    return c.json({ success: false, error: 'callbackUrl is not available' }, 503);
 
   if (data.overwrite) {
     const [existing] = await findPromptByClientNameAndRequestId(data.clientName, data.requestId);

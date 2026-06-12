@@ -5,3 +5,12 @@ export const isCallbackUrlAllowed = (url: string): boolean => {
   if (!urlAllowlist) return true;
   return urlAllowlist.test(url);
 };
+
+export const checkCallbackAvailability = async (url: string): Promise<boolean> => {
+  try {
+    await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
+    return true;
+  } catch {
+    return false;
+  }
+};

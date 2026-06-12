@@ -2,7 +2,7 @@ vi.mock('../../src/lib/config', () => ({
   config: { callback: { urlAllowlist: undefined as RegExp | undefined } }
 }));
 
-import { isCallbackUrlAllowed } from '../../src/lib/callbackUrl';
+import { checkCallbackAvailability, isCallbackUrlAllowed } from '../../src/lib/callbackUrl';
 import { config } from '../../src/lib/config';
 
 describe('isCallbackUrlAllowed', () => {
@@ -33,5 +33,31 @@ describe('isCallbackUrlAllowed', () => {
     config.callback.urlAllowlist = /^https:\/\/trusted\.example\.com/;
     expect(isCallbackUrlAllowed('https://trusted.example.com/hook')).toBe(true);
     expect(isCallbackUrlAllowed('https://untrusted.example.com/hook')).toBe(false);
+  });
+});
+
+describe('checkCallbackAvailability', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns true when fetch resolves with any HTTP status', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }));
+    expect(await checkCallbackAvailability('https://example.com/hook')).toBe(true);
+  });
+
+  it('returns true when fetch resolves with a 404', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 404 }));
+    expect(await checkCallbackAvailability('https://example.com/hook')).toBe(true);
+  });
+
+  it('returns false when fetch throws a network error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    expect(await checkCallbackAvailability('https://unreachable.example.com/hook')).toBe(false);
+  });
+
+  it('returns false when fetch times out (AbortError)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('The operation was aborted', 'AbortError')));
+    expect(await checkCallbackAvailability('https://slow.example.com/hook')).toBe(false);
   });
 });
