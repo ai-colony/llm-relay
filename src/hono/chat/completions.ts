@@ -12,7 +12,7 @@ type RelayChatRequest = z.infer<typeof RelayChatRequestSchema>;
 type StreamingApiType = Parameters<Parameters<typeof stream>[1]>[0];
 
 const writeChunks = async (s: StreamingApiType, request: RelayChatRequest) => {
-  for await (const chunk of streamChatCompletion(request.messages, request.tools))
+  for await (const chunk of streamChatCompletion(request.messages, request.tools, request.temperature))
     await s.write(`data: ${JSON.stringify(chunk)}\n\n`);
   await s.write('data: [DONE]\n\n');
 };

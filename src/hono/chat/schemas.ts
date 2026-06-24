@@ -25,5 +25,6 @@ export const RelayToolSchema = z.object({
 
 export const RelayChatRequestSchema = z.object({
   messages: z.array(RelayMessageSchema).min(1),
-  tools: z.array(RelayToolSchema).optional()
+  tools: z.array(RelayToolSchema).optional(),
+  temperature: z.number().min(0).max(2).optional()
 });

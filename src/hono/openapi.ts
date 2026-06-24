@@ -394,6 +394,12 @@ const spec = {
             type: 'array',
             items: { $ref: '#/components/schemas/ChatTool' },
             description: 'Optional tool/function definitions available to the model'
+          },
+          temperature: {
+            type: 'number',
+            minimum: 0,
+            maximum: 2,
+            description: 'Sampling temperature (0–2). Omit to use the model default.'
           }
         },
         required: ['messages']

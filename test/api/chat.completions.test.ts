@@ -103,7 +103,7 @@ describe('POST /chat/completions', () => {
       vi.mocked(streamChatCompletion).mockReturnValue(makeChunks([]));
 
       await postJson({ messages: validMessages });
-      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, undefined);
+      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, undefined, undefined);
     });
 
     it('passes tools to streamChatCompletion when provided', async () => {
@@ -116,7 +116,19 @@ describe('POST /chat/completions', () => {
       ];
 
       await postJson({ messages: validMessages, tools });
-      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, tools);
+      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, tools, undefined);
+    });
+
+    it('passes temperature to streamChatCompletion when provided', async () => {
+      vi.mocked(streamChatCompletion).mockReturnValue(makeChunks([]));
+
+      await postJson({ messages: validMessages, temperature: 0.2 });
+      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, undefined, 0.2);
+    });
+
+    it('returns 400 when temperature is out of range', async () => {
+      const response = await postJson({ messages: validMessages, temperature: 3 });
+      expect(response.status).toBe(400);
     });
   });
 
