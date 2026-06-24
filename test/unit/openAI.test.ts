@@ -116,9 +116,9 @@ describe('executeOpenAIPrompt', () => {
 
     await executeOpenAIPrompt({ system: undefined, user: 'test' }, 0.5);
 
-    const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
-    expect(callArgs.messages).toHaveLength(1);
-    expect(callArgs.messages[0]).toMatchObject({ role: 'user', content: 'test' });
+    const callArguments = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
+    expect(callArguments.messages).toHaveLength(1);
+    expect(callArguments.messages[0]).toMatchObject({ role: 'user', content: 'test' });
   });
 
   it('includes a system message when system is provided', async () => {
@@ -126,9 +126,9 @@ describe('executeOpenAIPrompt', () => {
 
     await executeOpenAIPrompt({ system: 'sys prompt', user: 'test' }, 0.5);
 
-    const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
-    expect(callArgs.messages).toHaveLength(2);
-    expect(callArgs.messages[0]).toMatchObject({ role: 'system', content: 'sys prompt' });
+    const callArguments = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
+    expect(callArguments.messages).toHaveLength(2);
+    expect(callArguments.messages[0]).toMatchObject({ role: 'system', content: 'sys prompt' });
   });
 });
 
@@ -178,8 +178,8 @@ describe('resolveModel', () => {
     const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
     await exec({ system: undefined, user: 'hi' }, 0);
 
-    const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { model: string };
-    expect(callArgs.model).toBe('first-model');
+    const callArguments = mockCompletionsCreate.mock.calls[0]?.[0] as { model: string };
+    expect(callArguments.model).toBe('first-model');
   });
 
   it('throws when the configured model is not in the available list', async () => {

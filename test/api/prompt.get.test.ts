@@ -1,9 +1,9 @@
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   findPromptByClientNameAndRequestId: vi.fn()
 }));
 
 import { get } from '../../src/hono/prompt/get';
-import { findPromptByClientNameAndRequestId } from '../../src/prompt/repository';
+import { findPromptByClientNameAndRequestId } from '../../src/prompt/repo';
 
 const getRequest = (clientName: string, requestId: string) =>
   get.request(`/?clientName=${encodeURIComponent(clientName)}&requestId=${encodeURIComponent(requestId)}`);

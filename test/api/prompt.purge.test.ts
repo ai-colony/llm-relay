@@ -1,12 +1,12 @@
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   purgeCompletedPrompts: vi.fn()
 }));
 
 import { purge } from '../../src/hono/prompt/purge';
-import { purgeCompletedPrompts } from '../../src/prompt/repository';
+import { purgeCompletedPrompts } from '../../src/prompt/repo';
 
-const deleteRequest = (params: Record<string, string | number>) => {
-  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
+const deleteRequest = (parameters: Record<string, string | number>) => {
+  const qs = new URLSearchParams(Object.entries(parameters).map(([k, v]) => [k, String(v)])).toString();
   return purge.request(`/?${qs}`, { method: 'DELETE' });
 };
 

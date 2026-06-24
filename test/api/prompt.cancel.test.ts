@@ -1,10 +1,10 @@
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   findPromptByClientNameAndRequestId: vi.fn(),
   deletePromptByClientNameAndRequestId: vi.fn()
 }));
 
 import { cancel } from '../../src/hono/prompt/cancel';
-import { deletePromptByClientNameAndRequestId, findPromptByClientNameAndRequestId } from '../../src/prompt/repository';
+import { deletePromptByClientNameAndRequestId, findPromptByClientNameAndRequestId } from '../../src/prompt/repo';
 
 const deleteRequest = (clientName: string, requestId: string) =>
   cancel.request(`/?clientName=${encodeURIComponent(clientName)}&requestId=${encodeURIComponent(requestId)}`, {

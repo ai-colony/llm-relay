@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator';
-import { deletePromptByClientNameAndRequestId, findPromptByClientNameAndRequestId } from '@prompt/repository';
+import { deletePromptByClientNameAndRequestId, findPromptByClientNameAndRequestId } from '@prompt/repo';
 import { Hono } from 'hono';
 
 import { QuerySchema } from './schemas';

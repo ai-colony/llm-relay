@@ -8,7 +8,7 @@ vi.mock('@lib', () => ({
   }
 }));
 
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   addPrompt: vi.fn(),
   findQueuedPrompts: vi.fn(),
   updatePromptsSetInProgress: vi.fn(),
@@ -29,7 +29,7 @@ import {
   updatePromptSetCompleted,
   updatePromptSetFailed,
   updatePromptsSetInProgress
-} from '../../src/prompt/repository';
+} from '../../src/prompt/repo';
 import { processCallbackPendingPrompts, processQueuedPrompts } from '../../src/prompt/service';
 
 const makeQueuedPrompt = (overrides: Record<string, unknown> = {}) => ({
@@ -132,8 +132,7 @@ describe('processQueuedPrompts', () => {
   });
 
   it('treats AbortError as transient', async () => {
-    const abortError = new Error('aborted');
-    abortError.name = 'AbortError';
+    const abortError = new DOMException('aborted', 'AbortError');
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(abortError);
 
@@ -156,8 +155,7 @@ describe('processQueuedPrompts', () => {
 
   it('treats an error with a transient cause as transient', async () => {
     const cause = new Error('fetch failed');
-    const outer = new Error('wrapped');
-    (outer as Error & { cause: unknown }).cause = cause;
+    const outer = new Error('wrapped', { cause });
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
     vi.mocked(executeOpenAIPrompt).mockRejectedValue(outer);
 

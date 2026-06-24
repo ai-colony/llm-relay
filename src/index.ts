@@ -1,7 +1,7 @@
 import { database } from '@db';
 import { serve } from '@hono/node-server';
 import { config, logger } from '@lib';
-import { getPromptStatusCounts, resetInProgressPrompts } from '@prompt/repository';
+import { getPromptStatusCounts, resetInProgressPrompts } from '@prompt/repo';
 import { processCallbackPendingPrompts, processQueuedPrompts } from '@prompt/service';
 import { migrate } from 'drizzle-orm/node-sqlite/migrator';
 
@@ -20,7 +20,7 @@ await resetInProgressPrompts();
 const startupCounts = await getPromptStatusCounts();
 logger.info({ component: 'server', ...startupCounts }, 'DB status on startup');
 
-let shuttingDown = false;
+let isShuttingDown = false;
 
 const workerThread = async () => {
   try {
@@ -29,7 +29,7 @@ const workerThread = async () => {
   } catch (error) {
     logger.error({ component: 'server', error }, 'Worker thread error');
   }
-  if (!shuttingDown) {
+  if (!isShuttingDown) {
     await new Promise((r) => setTimeout(r, 100));
     setImmediate(workerThread);
   }
@@ -37,9 +37,9 @@ const workerThread = async () => {
 setImmediate(workerThread);
 
 const shutdown = () => {
-  if (shuttingDown) return;
+  if (isShuttingDown) return;
   logger.info({ component: 'server' }, 'Shutting down...');
-  shuttingDown = true;
+  isShuttingDown = true;
   server.close(() => {
     logger.info({ component: 'server' }, 'Server closed');
     process.exit(0);

@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator';
-import { findPromptByClientNameAndRequestId } from '@prompt/repository';
+import { findPromptByClientNameAndRequestId } from '@prompt/repo';
 import { Hono } from 'hono';
 import { z } from 'zod';
 

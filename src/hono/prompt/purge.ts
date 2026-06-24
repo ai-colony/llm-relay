@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator';
-import { purgeCompletedPrompts } from '@prompt/repository';
+import { purgeCompletedPrompts } from '@prompt/repo';
 import { Hono } from 'hono';
 import { z } from 'zod';
 

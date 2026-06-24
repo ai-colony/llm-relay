@@ -3,6 +3,7 @@ import { config, logger } from '@lib';
 import { Hono } from 'hono';
 
 import { createAuthMiddleware } from './auth';
+import { chat } from './chat';
 import { health } from './health';
 import { metrics } from './metrics';
 import { openapi } from './openapi';
@@ -28,8 +29,10 @@ export const app = new Hono()
     })
   )
   .use('/prompt/*', auth)
+  .use('/chat/*', auth)
   .route('/', openapi)
   .route('/health', health)
   .route('/metrics', metrics)
   .route('/status', status)
-  .route('/prompt', prompt);
+  .route('/prompt', prompt)
+  .route('/chat', chat);

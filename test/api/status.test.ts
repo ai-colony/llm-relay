@@ -1,9 +1,9 @@
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   getPromptStatusCounts: vi.fn()
 }));
 
 import { status } from '../../src/hono/status';
-import { getPromptStatusCounts } from '../../src/prompt/repository';
+import { getPromptStatusCounts } from '../../src/prompt/repo';
 
 describe('GET /status', () => {
   it('returns queue and uptime metrics from the database', async () => {

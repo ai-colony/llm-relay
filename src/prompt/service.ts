@@ -9,7 +9,7 @@ import {
   updatePromptSetCompleted,
   updatePromptSetFailed,
   updatePromptsSetInProgress
-} from './repository';
+} from './repo';
 
 const computeNextRetryAt = (recentRetryCount: number): Date => {
   const delayMs = Math.min(2 ** recentRetryCount * 1000, 60_000);
@@ -31,7 +31,7 @@ const isTransientError = (error: unknown, depth = 0): boolean => {
   );
 };
 
-export { addPrompt as createPrompt } from './repository';
+export { addPrompt as createPrompt } from './repo';
 
 const buildCallbackHeaders = (body: string): Record<string, string> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -107,13 +107,13 @@ const executePrompt = async (prompt: Awaited<ReturnType<typeof findQueuedPrompts
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const transient = isTransientError(error);
-    const retryable = transient && prompt.retryCount + 1 < config.openai.maxRetryCount;
-    const nextRetryAt = retryable ? computeNextRetryAt(prompt.retryCount + 1) : undefined;
+    const isTransient = isTransientError(error);
+    const isRetryable = isTransient && prompt.retryCount + 1 < config.openai.maxRetryCount;
+    const nextRetryAt = isRetryable ? computeNextRetryAt(prompt.retryCount + 1) : undefined;
     await updatePromptSetFailed(
       prompt.id,
-      transient && !retryable ? 'max_retries_exceeded' : errorMessage,
-      retryable,
+      isTransient && !isRetryable ? 'max_retries_exceeded' : errorMessage,
+      isRetryable,
       nextRetryAt
     );
     logger.error(
@@ -122,7 +122,7 @@ const executePrompt = async (prompt: Awaited<ReturnType<typeof findQueuedPrompts
         error,
         clientName: prompt.clientName,
         requestId: prompt.requestId,
-        retryable,
+        retryable: isRetryable,
         retryCount: prompt.retryCount
       },
       'Prompt failed'

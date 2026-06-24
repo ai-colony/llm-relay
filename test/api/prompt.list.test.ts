@@ -1,9 +1,9 @@
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   findPromptsByClientName: vi.fn()
 }));
 
 import { list } from '../../src/hono/prompt/list';
-import { findPromptsByClientName } from '../../src/prompt/repository';
+import { findPromptsByClientName } from '../../src/prompt/repo';
 
 const makeRow = (requestId: number, promptStatus: string) => ({
   requestId,

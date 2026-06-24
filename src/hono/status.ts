@@ -1,4 +1,4 @@
-import { getPromptStatusCounts } from '@prompt/repository';
+import { getPromptStatusCounts } from '@prompt/repo';
 import { Hono } from 'hono';
 
 import { version } from '../../package.json';
