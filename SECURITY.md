@@ -20,7 +20,7 @@ Issues we consider in scope:
 - **API key exposure** — `API_KEY` or `OPENAI_KEY` leaking via logs, responses, or errors
 - **Prompt injection** — manipulating the relay to alter LLM behaviour in unintended ways
 - **SQLite file access** — path traversal or unintended exposure of the database file
-- **Authentication bypass** — circumventing the Bearer token middleware on `/prompt/*` routes
+- **Authentication bypass** — circumventing the Bearer token middleware on `/prompt/*` and `/chat/*` routes
 
 ## Out of Scope
 
