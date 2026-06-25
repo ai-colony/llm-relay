@@ -63,16 +63,20 @@ export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
 export const streamChatCompletion = async function* (
   messages: RelayMessage[],
   tools?: RelayTool[],
-  temperature?: number
+  temperature?: number,
+  signal?: AbortSignal
 ): AsyncGenerator<LlamaChunk> {
   const model = await resolveModel();
-  const completion = (await openai.chat.completions.create({
-    model,
-    messages: messages as unknown as ChatCompletionMessageParam[],
-    tools,
-    ...(temperature !== undefined && { temperature }),
-    stream: true
-  })) as unknown as AsyncIterable<LlamaChunk>;
+  const completion = (await openai.chat.completions.create(
+    {
+      model,
+      messages: messages as unknown as ChatCompletionMessageParam[],
+      tools,
+      ...(temperature !== undefined && { temperature }),
+      stream: true
+    },
+    { signal }
+  )) as unknown as AsyncIterable<LlamaChunk>;
 
   for await (const chunk of completion) yield chunk;
 };

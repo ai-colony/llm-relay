@@ -103,7 +103,12 @@ describe('POST /chat/completions', () => {
       vi.mocked(streamChatCompletion).mockReturnValue(makeChunks([]));
 
       await postJson({ messages: validMessages });
-      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, undefined, undefined);
+      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(
+        validMessages,
+        undefined,
+        undefined,
+        expect.any(AbortSignal)
+      );
     });
 
     it('passes tools to streamChatCompletion when provided', async () => {
@@ -116,14 +121,43 @@ describe('POST /chat/completions', () => {
       ];
 
       await postJson({ messages: validMessages, tools });
-      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, tools, undefined);
+      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(
+        validMessages,
+        tools,
+        undefined,
+        expect.any(AbortSignal)
+      );
     });
 
     it('passes temperature to streamChatCompletion when provided', async () => {
       vi.mocked(streamChatCompletion).mockReturnValue(makeChunks([]));
 
       await postJson({ messages: validMessages, temperature: 0.2 });
-      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(validMessages, undefined, 0.2);
+      expect(vi.mocked(streamChatCompletion)).toHaveBeenCalledWith(
+        validMessages,
+        undefined,
+        0.2,
+        expect.any(AbortSignal)
+      );
+    });
+
+    it('passes the request AbortSignal to streamChatCompletion', async () => {
+      vi.mocked(streamChatCompletion).mockReturnValue(makeChunks([]));
+      const controller = new AbortController();
+      controller.abort();
+
+      await completions.request(
+        new Request('http://localhost/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: validMessages }),
+          signal: controller.signal
+        })
+      );
+
+      const receivedSignal = vi.mocked(streamChatCompletion).mock.calls[0]?.[3];
+      expect(receivedSignal).toBeInstanceOf(AbortSignal);
+      expect(receivedSignal?.aborted).toBe(true);
     });
 
     it('returns 400 when temperature is out of range', async () => {
