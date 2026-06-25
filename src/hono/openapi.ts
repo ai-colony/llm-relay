@@ -140,6 +140,33 @@ const spec = {
         }
       }
     },
+    '/chat/completions': {
+      post: {
+        operationId: 'chatCompletions',
+        summary: 'Streaming chat completions',
+        description:
+          'Proxies a chat conversation to the upstream LLM and streams the response as Server-Sent Events. Each event is `data: <JSON chunk>` ending with `data: [DONE]`. Requires Bearer auth when API_KEY is configured.',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/ChatCompletionsBody' } } }
+        },
+        responses: {
+          '200': {
+            description: 'SSE stream of chat completion chunks',
+            content: {
+              'text/event-stream': {
+                schema: { type: 'string' },
+                example: 'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n'
+              }
+            }
+          },
+          '400': {
+            description: 'Invalid request body',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+          }
+        }
+      }
+    },
     '/prompt/cancel': {
       delete: {
         operationId: 'cancelPrompt',
@@ -310,6 +337,72 @@ const spec = {
           deleted: { type: 'integer', description: 'Number of records deleted' }
         },
         required: ['success', 'deleted']
+      },
+      RelayToolCall: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string', const: 'function' },
+          function: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              arguments: { type: 'string', description: 'JSON-encoded function arguments' }
+            },
+            required: ['name', 'arguments']
+          }
+        },
+        required: ['id', 'type', 'function']
+      },
+      ChatMessage: {
+        type: 'object',
+        properties: {
+          role: { type: 'string', enum: ['system', 'user', 'assistant', 'tool'] },
+          content: { type: ['string', 'null'], description: 'Message text; null for tool-call-only assistant turns' },
+          tool_calls: { type: 'array', items: { $ref: '#/components/schemas/RelayToolCall' } },
+          tool_call_id: { type: 'string', description: 'Required when role is tool' },
+          name: { type: 'string' }
+        },
+        required: ['role']
+      },
+      ChatTool: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', const: 'function' },
+          function: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              description: { type: 'string' },
+              parameters: { type: 'object', additionalProperties: true }
+            },
+            required: ['name', 'parameters']
+          }
+        },
+        required: ['type', 'function']
+      },
+      ChatCompletionsBody: {
+        type: 'object',
+        properties: {
+          messages: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/ChatMessage' },
+            minItems: 1,
+            description: 'Conversation history in OpenAI message format'
+          },
+          tools: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/ChatTool' },
+            description: 'Optional tool/function definitions available to the model'
+          },
+          temperature: {
+            type: 'number',
+            minimum: 0,
+            maximum: 2,
+            description: 'Sampling temperature (0–2). Omit to use the model default.'
+          }
+        },
+        required: ['messages']
       }
     }
   }

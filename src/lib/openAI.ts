@@ -1,8 +1,13 @@
 import OpenAI from 'openai';
-import type { ChatCompletionChunk } from 'openai/resources';
+import type { ChatCompletionChunk, ChatCompletionMessageParam } from 'openai/resources';
+import type { z } from 'zod';
 
+import type { RelayMessageSchema, RelayToolSchema } from '../hono/chat/schemas';
 import { config } from './config';
 import { logger } from './logger';
+
+type RelayMessage = z.infer<typeof RelayMessageSchema>;
+type RelayTool = z.infer<typeof RelayToolSchema>;
 
 // Types
 type LlamaDelta = ChatCompletionChunk.Choice.Delta & {
@@ -54,6 +59,27 @@ export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
   }
   return response.ok ? { ok: true } : { ok: false, error: `HTTP ${response.status}` };
 }
+
+export const streamChatCompletion = async function* (
+  messages: RelayMessage[],
+  tools?: RelayTool[],
+  temperature?: number,
+  signal?: AbortSignal
+): AsyncGenerator<LlamaChunk> {
+  const model = await resolveModel();
+  const completion = (await openai.chat.completions.create(
+    {
+      model,
+      messages: messages as unknown as ChatCompletionMessageParam[],
+      tools,
+      ...(temperature !== undefined && { temperature }),
+      stream: true
+    },
+    { signal }
+  )) as unknown as AsyncIterable<LlamaChunk>;
+
+  for await (const chunk of completion) yield chunk;
+};
 
 export const executeOpenAIPrompt = async (
   prompt: { system: string | null | undefined; user: string },

@@ -30,9 +30,9 @@ npm run drizzle:migrate  # Apply generated migrations
 
 Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run test:coverage`.
 
-- `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repository`)
+- `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repo`)
 - `test/api/` — route-handler tests; each file mounts a single Hono handler and mocks the service/repository layer (no DB, no OpenAI)
-- `test/helpers/testDb.ts` — in-memory SQLite setup for integration-style tests; mirrors all four production indexes using raw SQL (not Drizzle migrations), so **schema changes also require manual updates here**
+- `test/helpers/testDatabase.ts` — in-memory SQLite setup for integration-style tests; mirrors all four production indexes using raw SQL (not Drizzle migrations), so **schema changes also require manual updates here**
 
 Run a single test file: `npx vitest run test/unit/service.test.ts`
 
@@ -47,26 +47,27 @@ Coverage thresholds (enforced): 60% lines / functions / branches / statements.
 ### Layers
 
 **HTTP layer** — `src/hono/`  
-Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `GET /metrics`, `GET /openapi.json`, `GET /docs` (Swagger UI), `POST /prompt/add`, `GET /prompt/get`, `GET /prompt/list`, `DELETE /prompt/purge`, `DELETE /prompt/cancel`.
+Hono-based REST API with Zod validation. Routes: `GET /health`, `GET /status`, `GET /metrics`, `GET /openapi.json`, `GET /docs` (Swagger UI), `POST /prompt/add`, `GET /prompt/get`, `GET /prompt/list`, `DELETE /prompt/purge`, `DELETE /prompt/cancel`, `POST /chat/completions`.
 
-Auth middleware (`src/hono/auth.ts`) is applied only to `/prompt/*` — health, status, metrics, and OpenAPI endpoints are always public. When `API_KEY` is empty the middleware is a no-op.
+Auth middleware (`src/hono/auth.ts`) is applied to `/prompt/*` and `/chat/*` — health, status, metrics, and OpenAPI endpoints are always public. When `API_KEY` is empty the middleware is a no-op.
 
-Prompt-specific routes each live in their own file under `src/hono/prompt/` and are mounted by `src/hono/prompt/index.ts`. The shared `clientName + requestId` query schema is in `src/hono/prompt/schemas.ts` (used by both `get.ts` and `cancel.ts`). New prompt routes go there; non-prompt routes go directly under `src/hono/`.
+Prompt-specific routes each live in their own file under `src/hono/prompt/` and are mounted by `src/hono/prompt/index.ts`. The shared `clientName + requestId` query schema is in `src/hono/prompt/schemas.ts` (used by both `get.ts` and `cancel.ts`). Chat routes live under `src/hono/chat/`. New prompt routes go under `src/hono/prompt/`; non-prompt routes go directly under `src/hono/`.
 
 - `GET /health` checks both the SQLite database and the upstream OpenAI endpoint; returns `503` (not just a non-`ok` flag) if either fails.
 - `DELETE /prompt/cancel` **deletes** the record rather than marking it cancelled; it only succeeds for `queued`, `failed`, and `failed_retry` statuses — returns `409` if `in_progress` or already `completed`.
 - `DELETE /prompt/purge` bulk-deletes `completed` and `failed` records older than `days` days (default 7); accepts optional `clientName` to scope the purge.
 - `GET /prompt/list` caps results at 500 records.
+- `POST /chat/completions` proxies a chat conversation directly to the upstream LLM and streams the response as SSE (`text/event-stream`). Each event is `data: <JSON chunk>`, ending with `data: [DONE]`. This path bypasses the queue entirely — use it for interactive, low-latency chat.
 
 **Business logic** — `src/prompt/` (aliased as `@prompt`)
 
 - `src/prompt/service.ts` — worker loop functions called by the `setImmediate` loop in `src/index.ts`; picks up to `config.worker.concurrency` queued prompts per tick, marks them all `in_progress`, then executes them concurrently via `Promise.all`. Also handles callback delivery.
-- `src/prompt/repository.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
+- `src/prompt/repo.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
 
 **Shared library** — `src/lib/` (aliased as `@lib`)  
 `src/lib/index.ts` is the barrel; it re-exports `config`, `logger`, `executeOpenAIPrompt`, `isCallbackUrlAllowed`, and `checkCallbackAvailability`. Add new lib exports there when creating new modules.
 
-- `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics. The "Sending prompt" log includes a `sizes` field with character counts for system and user prompts.
+- `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics. The "Sending prompt" log includes a `sizes` field with character counts for system and user prompts. Exports `executeOpenAIPrompt` (used by the worker) and `streamChatCompletion` (used by `POST /chat/completions`); only the former is re-exported from the `@lib` barrel.
 - `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`, `OPENAI_MAX_RETRY_COUNT`, `WORKER_CONCURRENCY`, `CALLBACK_URL_ALLOWLIST`, `CALLBACK_RETRY_TTL_HOURS`, `CALLBACK_HMAC_SECRET`).
 - `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 - `src/lib/callbackUrl.ts` — `isCallbackUrlAllowed(url)` checks a URL against the `CALLBACK_URL_ALLOWLIST` regex (always passes when the env var is unset); `checkCallbackAvailability(url)` sends a `GET` probe (5 s timeout) and returns a boolean.
@@ -98,7 +99,7 @@ When touching these areas, keep these attack surfaces in mind:
 - **`callbackUrl`** — SSRF risk; restrict allowed targets with `CALLBACK_URL_ALLOWLIST` (regex).
 - **`API_KEY` / `OPENAI_KEY`** — must never appear in logs, responses, or errors.
 - **`callbackUrl` / `DATABASE_FILENAME`** — path traversal / unintended file exposure.
-- **Auth middleware** — Bearer token check applies only to `/prompt/*`; confirm new routes are mounted correctly.
+- **Auth middleware** — Bearer token check applies to `/prompt/*` and `/chat/*`; confirm new routes are mounted correctly.
 
 ## Tooling notes
 

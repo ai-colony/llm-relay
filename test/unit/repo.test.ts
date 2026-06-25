@@ -1,7 +1,7 @@
 vi.mock('@db', async () => {
-  const { testDbClient, testDbSchema } = await import('../helpers/testDb');
+  const { testDatabaseClient, testDbSchema } = await import('../helpers/testDatabase');
   return {
-    database: { dbClient: testDbClient, dbSchema: testDbSchema },
+    database: { dbClient: testDatabaseClient, dbSchema: testDbSchema },
     checkDatabase: () => ({ ok: true })
   };
 });
@@ -21,8 +21,8 @@ import {
   updatePromptSetCompleted,
   updatePromptSetFailed,
   updatePromptsSetInProgress
-} from '../../src/prompt/repository';
-import { clearDatabase } from '../helpers/testDb';
+} from '../../src/prompt/repo';
+import { clearDatabase } from '../helpers/testDatabase';
 
 const basePrompt = { clientName: 'test-client', requestId: 'req-1', userPrompt: 'hello', temperature: 0.7 };
 

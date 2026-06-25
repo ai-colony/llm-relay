@@ -1,9 +1,9 @@
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   getPromptStatusCounts: vi.fn()
 }));
 
 import { metrics } from '../../src/hono/metrics';
-import { getPromptStatusCounts } from '../../src/prompt/repository';
+import { getPromptStatusCounts } from '../../src/prompt/repo';
 
 describe('GET /metrics', () => {
   it('returns Prometheus text format with queue counts', async () => {

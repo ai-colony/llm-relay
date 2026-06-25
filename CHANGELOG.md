@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-25
+
+### Added
+
+- **`POST /chat/completions`**: new streaming chat endpoint that proxies a multi-turn conversation directly to the upstream LLM and streams the response as SSE (`text/event-stream`). Each event is `data: <JSON chunk>`, ending with `data: [DONE]`. Supports `messages`, `tools`, and `temperature`. Bypasses the queue entirely — designed for interactive, low-latency use cases. Auth middleware applies (`/chat/*`).
+- **Tool-call support in chat**: request body accepts an optional `tools` array (OpenAI function-calling format) forwarded verbatim to the upstream model.
+- **Temperature control**: `temperature` (0–2, optional) accepted in `POST /chat/completions` and forwarded to the upstream API.
+
+### Fixed
+
+- **Abort signal on chat**: cancellation is now correctly propagated to the upstream SSE stream when the client disconnects mid-response.
+
+### Changed
+
+- Dependency updates (`hono`, `zod`, `drizzle-orm`, dev tooling).
+
 ## [1.5.0] - 2026-06-12
 
 ### Added
@@ -91,7 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
-[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/ai-colony/llm-relay/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/ai-colony/llm-relay/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/ai-colony/llm-relay/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/ai-colony/llm-relay/compare/v1.3.0...v1.3.1

@@ -21,7 +21,9 @@ graph LR
 
     C -->|POST /prompt/add| H
     C -->|GET /prompt/get\nGET /prompt/list| H
+    C -->|POST /chat/completions\ndirect SSE stream| H
     H <-->|read / write| DB
+    H -->|stream chat\nbypass queue| LLM
     W -->|pick queued prompt| DB
     W -->|streaming request| LLM
     LLM -->|token stream| W
@@ -33,7 +35,9 @@ graph LR
 
 ### HTTP Layer (`src/hono/`)
 
-Hono-based REST API with Zod request validation. Routes are split by concern: prompt-specific routes live under `src/hono/prompt/`; cross-cutting routes (health, status, metrics, OpenAPI) sit directly under `src/hono/`. Bearer-token auth middleware is applied only to `/prompt/*` — monitoring endpoints are always public.
+Hono-based REST API with Zod request validation. Routes are split by concern: prompt-specific routes live under `src/hono/prompt/`; chat routes live under `src/hono/chat/`; cross-cutting routes (health, status, metrics, OpenAPI) sit directly under `src/hono/`. Bearer-token auth middleware is applied to `/prompt/*` and `/chat/*` — monitoring endpoints are always public.
+
+`POST /chat/completions` is a direct streaming path that bypasses the queue entirely: it calls `streamChatCompletion` in `openAI.ts`, pipes the SSE chunks straight to the client, and propagates the client's abort signal to cancel the upstream request on disconnect.
 
 ### Worker Loop (`src/index.ts` + `src/prompt/service.ts`)
 
@@ -62,4 +66,4 @@ queued → in_progress → completed
 
 - **`config.ts`** — environment variable parsing via `env-var`
 - **`logger.ts`** — Pino structured JSON logger; every log includes a `component` field (`server`, `http`, `worker`, `callback`, `openai`)
-- **`openAI.ts`** — OpenAI SDK streaming wrapper; resolves the model name once on first use, tracks reasoning vs response tokens separately, and emits timing metrics on completion
+- **`openAI.ts`** — OpenAI SDK streaming wrapper; resolves the model name once on first use. Exports `executeOpenAIPrompt` (used by the worker — accumulates the full response, tracks reasoning vs response tokens separately, emits timing metrics on completion) and `streamChatCompletion` (used by `POST /chat/completions` — yields raw SSE chunks directly to the caller)

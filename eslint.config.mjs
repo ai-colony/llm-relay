@@ -25,7 +25,7 @@ export default [
   js.configs.recommended,
   ...typescriptEslint.configs['flat/recommended'],
   prettierConfig,
-  unicorn.configs.all,
+  unicorn.configs.recommended,
   {
     plugins: {
       'simple-import-sort': simpleImportSort
@@ -68,7 +68,12 @@ export default [
       '@typescript-eslint/no-shadow': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       'unicorn/no-null': 'off',
-      'unicorn/prevent-abbreviations': 'off'
+      'unicorn/prevent-abbreviations': 'off',
+      'unicorn/max-nested-calls': 'off',
+      'unicorn/prefer-temporal': 'off',
+      'unicorn/prefer-dispose': 'off',
+      'unicorn/prefer-uint8array-base64': 'off',
+      'unicorn/no-top-level-side-effects': 'off'
     }
   },
   {
@@ -86,7 +91,14 @@ export default [
       '@typescript-eslint/require-array-sort-compare': ['error', { ignoreStringArrays: true }],
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-unnecessary-type-assertion': 'error',
-      '@typescript-eslint/no-redundant-type-constituents': 'error'
+      '@typescript-eslint/no-redundant-type-constituents': 'error',
+      'unicorn/max-nested-calls': 'off',
+      'unicorn/prefer-temporal': 'off',
+      'unicorn/prefer-dispose': 'off',
+      'unicorn/prefer-uint8array-base64': 'off',
+      'unicorn/no-top-level-side-effects': 'off',
+      'unicorn/no-top-level-assignment-in-function': 'off',
+      'unicorn/prefer-await': 'off'
     }
   }
 ];

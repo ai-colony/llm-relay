@@ -2,7 +2,7 @@ vi.mock('../../src/prompt/service', () => ({
   createPrompt: vi.fn()
 }));
 
-vi.mock('../../src/prompt/repository', () => ({
+vi.mock('../../src/prompt/repo', () => ({
   countQueuedPrompts: vi.fn(),
   findPromptByClientNameAndRequestId: vi.fn(),
   deletePromptForOverwrite: vi.fn()
@@ -19,7 +19,7 @@ import {
   countQueuedPrompts,
   deletePromptForOverwrite,
   findPromptByClientNameAndRequestId
-} from '../../src/prompt/repository';
+} from '../../src/prompt/repo';
 import { createPrompt } from '../../src/prompt/service';
 
 const validBody = { clientName: 'my-client', requestId: 'req-1', userPrompt: 'hello', temperature: 0.7 };

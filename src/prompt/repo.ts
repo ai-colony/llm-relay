@@ -75,14 +75,14 @@ export const updatePromptSetCompleted = (
     })
     .where(eq(prompts.id, id));
 
-export const updatePromptSetFailed = (id: number, error: string, retryable: boolean, nextRetryAt?: Date) =>
+export const updatePromptSetFailed = (id: number, error: string, isRetryable: boolean, nextRetryAt?: Date) =>
   dbClient
     .update(prompts)
     .set({
-      status: retryable ? 'failed_retry' : 'failed',
+      status: isRetryable ? 'failed_retry' : 'failed',
       statusError: error,
       completedAt: new Date(),
-      ...(retryable ? { retryCount: sql`${prompts.retryCount} + 1`, nextRetryAt } : {})
+      ...(isRetryable && { retryCount: sql`${prompts.retryCount} + 1`, nextRetryAt })
     })
     .where(eq(prompts.id, id));
 

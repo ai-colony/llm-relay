@@ -52,7 +52,7 @@ Tests live in two directories:
 
 60% coverage is enforced on lines, functions, branches, and statements.
 
-> **Note:** If you change `src/db/schema.ts`, you must also update `test/helpers/testDb.ts` manually — it mirrors the schema using raw SQL and is not driven by Drizzle migrations.
+> **Note:** If you change `src/db/schema.ts`, you must also update `test/helpers/testDatabase.ts` manually — it mirrors the schema using raw SQL and is not driven by Drizzle migrations.
 
 ## Submitting a PR
 

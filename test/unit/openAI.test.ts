@@ -23,7 +23,7 @@ vi.mock('openai', () => ({
   }
 }));
 
-import { checkOpenAI, executeOpenAIPrompt } from '../../src/lib/openAI';
+import { checkOpenAI, executeOpenAIPrompt, streamChatCompletion } from '../../src/lib/openAI';
 
 function makeStream(chunks: Array<{ reasoning_content?: string; content?: string }>) {
   return (async function* () {
@@ -116,9 +116,9 @@ describe('executeOpenAIPrompt', () => {
 
     await executeOpenAIPrompt({ system: undefined, user: 'test' }, 0.5);
 
-    const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
-    expect(callArgs.messages).toHaveLength(1);
-    expect(callArgs.messages[0]).toMatchObject({ role: 'user', content: 'test' });
+    const callArguments = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
+    expect(callArguments.messages).toHaveLength(1);
+    expect(callArguments.messages[0]).toMatchObject({ role: 'user', content: 'test' });
   });
 
   it('includes a system message when system is provided', async () => {
@@ -126,9 +126,52 @@ describe('executeOpenAIPrompt', () => {
 
     await executeOpenAIPrompt({ system: 'sys prompt', user: 'test' }, 0.5);
 
-    const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
-    expect(callArgs.messages).toHaveLength(2);
-    expect(callArgs.messages[0]).toMatchObject({ role: 'system', content: 'sys prompt' });
+    const callArguments = mockCompletionsCreate.mock.calls[0]?.[0] as { messages: unknown[] };
+    expect(callArguments.messages).toHaveLength(2);
+    expect(callArguments.messages[0]).toMatchObject({ role: 'system', content: 'sys prompt' });
+  });
+});
+
+describe('streamChatCompletion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockModelsList.mockResolvedValue({ data: [{ id: 'test-model' }] });
+  });
+
+  it('yields all chunks from the upstream completion', async () => {
+    const chunks = [{ choices: [{ delta: { content: 'a' } }] }, { choices: [{ delta: { content: 'b' } }] }];
+    mockCompletionsCreate.mockResolvedValue(
+      (async function* () {
+        for (const c of chunks) yield c;
+      })()
+    );
+
+    const result: unknown[] = await Array.fromAsync(streamChatCompletion([{ role: 'user', content: 'hi' }]));
+
+    expect(result).toEqual(chunks);
+  });
+
+  it('forwards the AbortSignal to the OpenAI SDK', async () => {
+    mockCompletionsCreate.mockResolvedValue((async function* () {})());
+    const controller = new AbortController();
+
+    await Array.fromAsync(
+      streamChatCompletion([{ role: 'user', content: 'hi' }], undefined, undefined, controller.signal)
+    );
+
+    expect(mockCompletionsCreate).toHaveBeenCalledWith(expect.objectContaining({ stream: true }), {
+      signal: controller.signal
+    });
+  });
+
+  it('passes undefined signal when none is provided', async () => {
+    mockCompletionsCreate.mockResolvedValue((async function* () {})());
+
+    await Array.fromAsync(streamChatCompletion([{ role: 'user', content: 'hi' }]));
+
+    expect(mockCompletionsCreate).toHaveBeenCalledWith(expect.objectContaining({ stream: true }), {
+      signal: undefined
+    });
   });
 });
 
@@ -178,8 +221,8 @@ describe('resolveModel', () => {
     const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
     await exec({ system: undefined, user: 'hi' }, 0);
 
-    const callArgs = mockCompletionsCreate.mock.calls[0]?.[0] as { model: string };
-    expect(callArgs.model).toBe('first-model');
+    const callArguments = mockCompletionsCreate.mock.calls[0]?.[0] as { model: string };
+    expect(callArguments.model).toBe('first-model');
   });
 
   it('throws when the configured model is not in the available list', async () => {

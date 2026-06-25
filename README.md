@@ -32,7 +32,7 @@ cp .env.example .env   # then edit .env
 | Variable                   | Default                    | Description                                                                                                                                                                  |
 | -------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PORT`                     | `3000`                     | HTTP port the relay listens on                                                                                                                                               |
-| `API_KEY`                  | _(empty)_                  | When set, all `/prompt` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, and `GET /metrics` remain public.                                     |
+| `API_KEY`                  | _(empty)_                  | When set, all `/prompt/*` and `/chat/*` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, and `GET /metrics` remain public.                     |
 | `LOG_LEVEL`                | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`)                                                                                                                   |
 | `DATABASE_FILENAME`        | `./database.sqlite`        | Path to the SQLite database file                                                                                                                                             |
 | `OPENAI_URL`               | `http://localhost:8080/v1` | Base URL of the OpenAI-compatible API                                                                                                                                        |
@@ -94,14 +94,14 @@ Images are published to GitHub Container Registry. A new image is built and push
 
 | Tag                       | Example                                   | When to use                                                            |
 | ------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
-| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.5.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
+| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.6.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
 | `<image>@sha256:<digest>` | `ghcr.io/ai-colony/llm-relay@sha256:abc…` | Fully reproducible deployments — immune to tag mutation.               |
 
 To find the digest for a given version:
 
 ```bash
-docker pull ghcr.io/ai-colony/llm-relay:1.5.0
-docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.5.0
+docker pull ghcr.io/ai-colony/llm-relay:1.6.0
+docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.6.0
 # ghcr.io/ai-colony/llm-relay@sha256:<digest>
 ```
 
@@ -113,7 +113,7 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.5.0
+  ghcr.io/ai-colony/llm-relay:1.6.0
 ```
 
 Full — all available environment variables:
@@ -129,7 +129,7 @@ docker run -d --rm \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.5.0
+  ghcr.io/ai-colony/llm-relay:1.6.0
 ```
 
 Key points:
@@ -176,7 +176,7 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.5.0",
+  "version": "1.6.0",
   "uptime": 42,
   "queued": 3,
   "pending": 1,
@@ -412,6 +412,69 @@ const CancelPromptResponse = z.object({
 type CancelPromptResponse = z.infer<typeof CancelPromptResponse>;
 ```
 
+### `POST /chat/completions`
+
+Stream a multi-turn conversation directly to the upstream LLM. This path **bypasses the queue** — use it for interactive, low-latency chat. The response is an SSE stream (`text/event-stream`): each event is `data: <JSON chunk>` (OpenAI streaming format), ending with `data: [DONE]`.
+
+**Request body:**
+
+```json
+{
+  "messages": [
+    { "role": "system", "content": "You are a helpful assistant." },
+    { "role": "user", "content": "Hello!" }
+  ],
+  "tools": [],
+  "temperature": 0.7
+}
+```
+
+| Field         | Type  | Required | Description                                                                                  |
+| ------------- | ----- | -------- | -------------------------------------------------------------------------------------------- |
+| `messages`    | array | yes      | Conversation history; each message has `role` and `content` (plus optional tool-call fields) |
+| `tools`       | array | no       | OpenAI function-calling tool definitions forwarded verbatim to the upstream model            |
+| `temperature` | float | no       | Sampling temperature, `0`–`2`                                                                |
+
+```typescript
+import { z } from 'zod';
+
+const RelayMessageSchema = z.object({
+  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  content: z.string().nullable().optional(),
+  tool_calls: z
+    .array(
+      z.object({
+        id: z.string(),
+        type: z.literal('function'),
+        function: z.object({ name: z.string(), arguments: z.string() })
+      })
+    )
+    .optional(),
+  tool_call_id: z.string().optional(),
+  name: z.string().optional()
+});
+
+const RelayChatRequestSchema = z.object({
+  messages: z.array(RelayMessageSchema).min(1),
+  tools: z
+    .array(
+      z.object({
+        type: z.literal('function'),
+        function: z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          parameters: z.record(z.string(), z.unknown())
+        })
+      })
+    )
+    .optional(),
+  temperature: z.number().min(0).max(2).optional()
+});
+type RelayChatRequest = z.infer<typeof RelayChatRequestSchema>;
+```
+
+If the client disconnects mid-stream, the abort signal is propagated and the upstream request is cancelled.
+
 ## Prompt lifecycle
 
 ```
@@ -486,10 +549,10 @@ curl -s http://localhost:3000/status
 
 Tests use [Vitest](https://vitest.dev/) and are split into two categories:
 
-| Directory    | What it tests                                                | External dependencies                              |
-| ------------ | ------------------------------------------------------------ | -------------------------------------------------- |
-| `test/unit/` | Business logic (`config`, `openAI`, `repository`, `service`) | Mocked via `vi.mock`                               |
-| `test/api/`  | Hono route handlers (one file per endpoint)                  | Service/repository layer mocked; no real DB or LLM |
+| Directory    | What it tests                                          | External dependencies                              |
+| ------------ | ------------------------------------------------------ | -------------------------------------------------- |
+| `test/unit/` | Business logic (`config`, `openAI`, `repo`, `service`) | Mocked via `vi.mock`                               |
+| `test/api/`  | Hono route handlers (one file per endpoint)            | Service/repository layer mocked; no real DB or LLM |
 
 60% coverage is enforced on lines, functions, branches, and statements.
 

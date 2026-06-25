@@ -37,7 +37,7 @@ sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_status_priority_created ON p
 sqlite.exec('CREATE INDEX IF NOT EXISTS idx_prompts_client_created ON prompts (clientName, createdAt)');
 
 export const testSqlite = sqlite;
-export const testDbClient = drizzle({ client: sqlite, schema });
+export const testDatabaseClient = drizzle({ client: sqlite, schema });
 
 export const clearDatabase = () => sqlite.exec('DELETE FROM prompts');
 

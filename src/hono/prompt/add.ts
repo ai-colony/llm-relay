@@ -1,6 +1,6 @@
 import { zValidator } from '@hono/zod-validator';
 import { checkCallbackAvailability, isCallbackUrlAllowed } from '@lib';
-import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repository';
+import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repo';
 import { createPrompt } from '@prompt/service';
 import { Hono } from 'hono';
 import { z } from 'zod';

@@ -1,4 +1,4 @@
-import { getPromptStatusCounts } from '@prompt/repository';
+import { getPromptStatusCounts } from '@prompt/repo';
 import { Hono } from 'hono';
 
 const metric = (name: string, type: 'gauge' | 'counter', help: string, value: number) =>
