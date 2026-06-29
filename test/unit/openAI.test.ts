@@ -59,7 +59,11 @@ describe('checkOpenAI', () => {
 describe('executeOpenAIPrompt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockModelsList.mockResolvedValue({ data: [{ id: 'test-model' }] });
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'test-model', meta: { n_ctx: 32_768 } }]));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('returns reasoning and response from a mixed stream', async () => {
@@ -135,7 +139,11 @@ describe('executeOpenAIPrompt', () => {
 describe('streamChatCompletion', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockModelsList.mockResolvedValue({ data: [{ id: 'test-model' }] });
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'test-model', meta: { n_ctx: 32_768 } }]));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('yields all chunks from the upstream completion', async () => {
@@ -188,11 +196,26 @@ const makeConfigMock = (model: string) => ({
 
 const makeLoggerMock = () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } });
 
-describe('resolveModel', () => {
+function makeModelsFetch(
+  data: Array<{ id: string; meta?: { n_ctx?: number } }>,
+  isOk = true
+): ReturnType<typeof vi.fn> {
+  return vi.fn().mockResolvedValue({
+    ok: isOk,
+    status: isOk ? 200 : 503,
+    json: () => Promise.resolve({ data })
+  });
+}
+
+describe('resolveModel / resolveModelInfo', () => {
   beforeEach(() => {
     vi.resetModules();
     mockModelsList.mockReset();
     mockCompletionsCreate.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('resolves the model only once across multiple executeOpenAIPrompt calls', async () => {
@@ -200,14 +223,15 @@ describe('resolveModel', () => {
     vi.doMock('../../src/lib/config', () => makeConfigMock('test-model'));
     vi.doMock('../../src/lib/logger', makeLoggerMock);
 
-    mockModelsList.mockResolvedValue({ data: [{ id: 'test-model' }] });
+    const mockFetch = makeModelsFetch([{ id: 'test-model', meta: { n_ctx: 32_768 } }]);
+    vi.stubGlobal('fetch', mockFetch);
     mockCompletionsCreate.mockResolvedValue(makeStream([{ content: 'ok' }]));
 
     const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
     await exec({ system: undefined, user: 'first' }, 0);
     await exec({ system: undefined, user: 'second' }, 0);
 
-    expect(mockModelsList).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to the first available model when config.openai.model is empty', async () => {
@@ -215,7 +239,7 @@ describe('resolveModel', () => {
     vi.doMock('../../src/lib/config', () => makeConfigMock(''));
     vi.doMock('../../src/lib/logger', makeLoggerMock);
 
-    mockModelsList.mockResolvedValue({ data: [{ id: 'first-model' }, { id: 'second-model' }] });
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'first-model' }, { id: 'second-model' }]));
     mockCompletionsCreate.mockResolvedValue(makeStream([{ content: 'ok' }]));
 
     const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
@@ -230,7 +254,7 @@ describe('resolveModel', () => {
     vi.doMock('../../src/lib/config', () => makeConfigMock('missing-model'));
     vi.doMock('../../src/lib/logger', makeLoggerMock);
 
-    mockModelsList.mockResolvedValue({ data: [{ id: 'other-model' }] });
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'other-model' }]));
 
     const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
     await expect(exec({ system: undefined, user: 'hi' }, 0)).rejects.toThrow('No models found');
@@ -241,14 +265,61 @@ describe('resolveModel', () => {
     vi.doMock('../../src/lib/config', () => makeConfigMock('test-model'));
     vi.doMock('../../src/lib/logger', makeLoggerMock);
 
-    mockModelsList.mockRejectedValueOnce(new Error('temporary API failure'));
-    mockModelsList.mockResolvedValueOnce({ data: [{ id: 'test-model' }] });
+    const mockFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('temporary API failure'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: [{ id: 'test-model', meta: { n_ctx: 32_768 } }] })
+      });
+    vi.stubGlobal('fetch', mockFetch);
     mockCompletionsCreate.mockResolvedValue(makeStream([{ content: 'ok' }]));
 
     const { executeOpenAIPrompt: exec } = await import('../../src/lib/openAI');
     await expect(exec({ system: undefined, user: 'first' }, 0)).rejects.toThrow('temporary API failure');
     await exec({ system: undefined, user: 'second' }, 0);
 
-    expect(mockModelsList).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('includes contextSize from meta.n_ctx in getModelInfo result', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model'));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'test-model', meta: { n_ctx: 32_768 } }]));
+
+    const { getModelInfo } = await import('../../src/lib/openAI');
+    const info = await getModelInfo();
+
+    expect(info.model).toBe('test-model');
+    expect(info.contextSize).toBe(32_768);
+  });
+
+  it('strips directory path from model id, returning only the filename', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock(''));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: '/Users/user/models/Qwen3.5-9B.gguf', meta: { n_ctx: 32_768 } }]));
+
+    const { getModelInfo } = await import('../../src/lib/openAI');
+    const info = await getModelInfo();
+
+    expect(info.model).toBe('Qwen3.5-9B.gguf');
+  });
+
+  it('returns contextSize as undefined when meta is absent', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model'));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'test-model' }]));
+
+    const { getModelInfo } = await import('../../src/lib/openAI');
+    const info = await getModelInfo();
+
+    expect(info.contextSize).toBeUndefined();
   });
 });

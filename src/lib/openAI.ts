@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import OpenAI from 'openai';
 import type { ChatCompletionChunk, ChatCompletionMessageParam } from 'openai/resources';
 import type { z } from 'zod';
@@ -28,24 +30,40 @@ const openai = new OpenAI({
   timeout: config.openai.timeout
 });
 
-let resolvedModelPromise: Promise<string> | undefined;
+export type ModelInfo = { model: string; contextSize: number | undefined };
 
-const resolveModel = (): Promise<string> => {
-  if (!resolvedModelPromise)
-    resolvedModelPromise = (async () => {
+let resolvedModelInfoPromise: Promise<ModelInfo> | undefined;
+
+const resolveModelInfo = (): Promise<ModelInfo> => {
+  if (!resolvedModelInfoPromise)
+    resolvedModelInfoPromise = (async () => {
       const requestedModel = config.openai.model;
-      const list = await openai.models.list();
-      const model = requestedModel ? list.data.find((m) => m.id === requestedModel)?.id : list.data[0]?.id;
-      if (!model) throw new Error('No models found' + (requestedModel ? ` with id ${requestedModel}` : ''));
-      logger.info({ component: 'openai', model }, 'Using model');
-      return model;
+      const response = await fetch(`${config.openai.url}/models`, {
+        headers: { Authorization: `Bearer ${config.openai.key}` },
+        signal: AbortSignal.timeout(config.openai.timeout)
+      });
+      if (!response.ok) throw new Error(`Models endpoint returned HTTP ${response.status}`);
+      const json = (await response.json()) as { data: Array<{ id: string; meta?: { n_ctx?: number } }> };
+      const entry = requestedModel ? json.data.find((m) => m.id === requestedModel) : json.data[0];
+      if (!entry) throw new Error('No models found' + (requestedModel ? ` with id ${requestedModel}` : ''));
+      const contextSize = entry.meta?.n_ctx;
+      const model = path.basename(entry.id);
+      logger.info({ component: 'openai', model, contextSize }, 'Using model');
+      return { model, contextSize };
     })().catch((error: unknown) => {
-      resolvedModelPromise = undefined;
+      resolvedModelInfoPromise = undefined;
       throw error;
     });
 
-  return resolvedModelPromise;
+  return resolvedModelInfoPromise;
 };
+
+const resolveModel = async (): Promise<string> => {
+  const info = await resolveModelInfo();
+  return info.model;
+};
+
+export const getModelInfo = (): Promise<ModelInfo> => resolveModelInfo();
 
 export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
   let response: Response;
