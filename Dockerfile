@@ -1,4 +1,4 @@
-ARG NODE_IMAGE=node:24.16.0-alpine3.24
+ARG NODE_IMAGE=node:24.18.0-alpine3.24
 
 
 # Builder
@@ -29,5 +29,7 @@ LABEL org.opencontainers.image.description="HTTP relay server that queues LLM pr
 USER node
 VOLUME ["/app/data"]
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO /dev/null http://localhost:3000/health || exit 1
 
 CMD ["node", "--no-warnings=ExperimentalWarning", "dist/index.js"]
