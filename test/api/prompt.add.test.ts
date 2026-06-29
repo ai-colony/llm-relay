@@ -77,7 +77,7 @@ describe('POST /prompt/add', () => {
 
   it('returns 409 on duplicate clientName + requestId', async () => {
     vi.mocked(createPrompt).mockRejectedValue(
-      new Error('UNIQUE constraint failed: prompts.clientName, prompts.requestId')
+      Object.assign(new Error('UNIQUE constraint failed'), { code: 'ERR_SQLITE_ERROR', errcode: 2067 })
     );
     const response = await postJson(validBody);
     expect(response.status).toBe(409);
@@ -142,7 +142,7 @@ describe('POST /prompt/add', () => {
 
     it('overwrite=false still returns 409 on UNIQUE conflict', async () => {
       vi.mocked(createPrompt).mockRejectedValue(
-        new Error('UNIQUE constraint failed: prompts.clientName, prompts.requestId')
+        Object.assign(new Error('UNIQUE constraint failed'), { code: 'ERR_SQLITE_ERROR', errcode: 2067 })
       );
       const response = await postJson({ ...validBody, overwrite: false });
       expect(response.status).toBe(409);

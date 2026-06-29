@@ -245,6 +245,24 @@ describe('findCallbackPendingPrompts', () => {
     const pending = await findCallbackPendingPrompts(new Date(0));
     expect(pending).toHaveLength(0);
   });
+
+  it('returns a prompt completed within the TTL window (completedAt > cutoff)', async () => {
+    const id = await addPrompt({ ...basePrompt, callbackUrl: 'https://cb.example.com' });
+    await updatePromptsSetInProgress([Number(id)]);
+    await updatePromptSetCompleted(Number(id), completionData);
+    const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+    const pending = await findCallbackPendingPrompts(cutoff);
+    expect(pending).toHaveLength(1);
+  });
+
+  it('does not return a prompt whose TTL has expired (completedAt < cutoff)', async () => {
+    const id = await addPrompt({ ...basePrompt, callbackUrl: 'https://cb.example.com' });
+    await updatePromptsSetInProgress([Number(id)]);
+    await updatePromptSetCompleted(Number(id), completionData);
+    const cutoff = new Date(Date.now() + 1000);
+    const pending = await findCallbackPendingPrompts(cutoff);
+    expect(pending).toHaveLength(0);
+  });
 });
 
 describe('deletePromptByClientNameAndRequestId', () => {

@@ -15,7 +15,7 @@ const auth = createAuthMiddleware(config.http.apiKey);
 export const app = new Hono()
   .onError((error, c) => {
     logger.error({ component: 'http', error }, 'Unhandled route error');
-    return c.json({ success: false, error: 'Internal server error' }, 500);
+    return c.json({ success: false, error: 'Internal server error', path: c.req.path, method: c.req.method }, 500);
   })
   .use(
     structuredLogger({

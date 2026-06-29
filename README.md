@@ -94,14 +94,14 @@ Images are published to GitHub Container Registry. A new image is built and push
 
 | Tag                       | Example                                   | When to use                                                            |
 | ------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
-| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.6.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
+| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.7.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
 | `<image>@sha256:<digest>` | `ghcr.io/ai-colony/llm-relay@sha256:abc…` | Fully reproducible deployments — immune to tag mutation.               |
 
 To find the digest for a given version:
 
 ```bash
-docker pull ghcr.io/ai-colony/llm-relay:1.6.0
-docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.6.0
+docker pull ghcr.io/ai-colony/llm-relay:1.7.0
+docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.7.0
 # ghcr.io/ai-colony/llm-relay@sha256:<digest>
 ```
 
@@ -113,7 +113,7 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.6.0
+  ghcr.io/ai-colony/llm-relay:1.7.0
 ```
 
 Full — all available environment variables:
@@ -129,7 +129,7 @@ docker run -d --rm \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.6.0
+  ghcr.io/ai-colony/llm-relay:1.7.0
 ```
 
 Key points:
@@ -176,8 +176,10 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.6.0",
+  "version": "1.7.0",
   "uptime": 42,
+  "model": "llama-3.2",
+  "contextSize": 131072,
   "queued": 3,
   "pending": 1,
   "completed": 150,
@@ -192,6 +194,8 @@ import { z } from 'zod';
 const StatusResponse = z.object({
   version: z.string(),
   uptime: z.number(),
+  model: z.string().nullable(),
+  contextSize: z.number().int().nullable(),
   queued: z.number().int(),
   pending: z.number().int(),
   completed: z.number().int(),

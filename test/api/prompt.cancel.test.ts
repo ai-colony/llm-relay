@@ -63,4 +63,9 @@ describe('DELETE /prompt/cancel', () => {
     const response = await cancel.request('/', { method: 'DELETE' });
     expect(response.status).toBe(400);
   });
+
+  it('returns 400 when clientName is empty', async () => {
+    const response = await deleteRequest('', 'req-1');
+    expect(response.status).toBe(400);
+  });
 });

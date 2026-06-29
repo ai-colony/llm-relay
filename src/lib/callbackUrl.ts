@@ -8,7 +8,7 @@ export const isCallbackUrlAllowed = (url: string): boolean => {
 
 export const checkCallbackAvailability = async (url: string): Promise<boolean> => {
   try {
-    await fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) });
+    await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
     return true;
   } catch {
     return false;

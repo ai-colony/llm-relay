@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-30
+
+### Added
+
+- **`model` and `contextSize` in `GET /status`**: the status response now includes the resolved model name and its context-window size, fetched from the upstream API alongside queue counts. Both fields are `null` when the upstream is unreachable at status time.
+- **Config validation enforcement**: environment variables are now validated at startup with explicit runtime errors for out-of-range values (e.g. `WORKER_CONCURRENCY` above `16`, negative `OPENAI_TIMEOUT`).
+
+### Fixed
+
+- **Graceful shutdown**: on `SIGTERM`/`SIGINT` the server now waits up to 15 s for the current worker tick to complete before closing, then calls `closeDatabase()` to flush WAL and release the SQLite file handle cleanly.
+- **Callback availability probe uses `HEAD`**: `checkCallbackAvailability` now sends a `HEAD` request instead of `GET`, reducing unintended side effects on callback receivers during the pre-submission probe.
+- **Unique-constraint error detection**: `POST /prompt/add` now identifies duplicate-key violations by SQLite error code (`ERR_SQLITE_ERROR` / `SQLITE_CONSTRAINT_UNIQUE`) instead of string-matching the error message — more reliable across Node.js versions.
+- **`clientName` schema in query routes**: `GET /prompt/get` and `DELETE /prompt/cancel` now enforce `clientName` as a non-empty string, consistent with the add endpoint.
+- **OpenAPI schema**: missing fields and components corrected in the generated spec.
+- **Migration startup path**: startup migration now handles edge cases that could cause the server to fail on first launch with an empty database.
+- **HTTP error logging**: the Hono error handler now logs unhandled errors at `error` level instead of silently swallowing them.
+
+### Changed
+
+- Dependency updates (`openai`, `drizzle-orm`, `drizzle-kit`, dev tooling).
+
 ## [1.6.0] - 2026-06-25
 
 ### Added
@@ -107,7 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
-[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/ai-colony/llm-relay/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/ai-colony/llm-relay/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/ai-colony/llm-relay/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/ai-colony/llm-relay/compare/v1.3.1...v1.4.0

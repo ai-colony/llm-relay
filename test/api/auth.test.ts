@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
 
+vi.mock('../../src/lib/logger', () => ({
+  logger: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() }
+}));
+
 import { createAuthMiddleware } from '../../src/hono/auth';
 
 function makeApp(apiKey: string) {
