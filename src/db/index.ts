@@ -14,6 +14,8 @@ export const database = {
   dbSchema: schema
 };
 
+export { SQLITE_CONSTRAINT_UNIQUE, SqliteError } from './errors';
+
 export const checkDatabase = (): { ok: boolean; error?: string } => {
   try {
     client.run(sql`SELECT 1`);

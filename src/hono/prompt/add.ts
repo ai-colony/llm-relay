@@ -1,3 +1,5 @@
+import type { SqliteError } from '@db';
+import { SQLITE_CONSTRAINT_UNIQUE } from '@db';
 import { zValidator } from '@hono/zod-validator';
 import { checkCallbackAvailability, isCallbackUrlAllowed } from '@lib';
 import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repo';
@@ -44,7 +46,11 @@ export const add = new Hono().post('/', zValidator('json', BodySchema), async (c
   try {
     await createPrompt(data);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed'))
+    if (
+      error instanceof Error &&
+      (error as SqliteError).code === 'ERR_SQLITE_ERROR' &&
+      (error as SqliteError).errcode === SQLITE_CONSTRAINT_UNIQUE
+    )
       return c.json({ success: false, error: 'A prompt with this clientName and requestId already exists' }, 409);
     throw error;
   }
