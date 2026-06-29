@@ -60,4 +60,11 @@ describe('checkCallbackAvailability', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('The operation was aborted', 'AbortError')));
     expect(await checkCallbackAvailability('https://slow.example.com/hook')).toBe(false);
   });
+
+  it('probes using HEAD method', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ status: 200 });
+    vi.stubGlobal('fetch', mockFetch);
+    await checkCallbackAvailability('https://example.com/hook');
+    expect(mockFetch).toHaveBeenCalledWith('https://example.com/hook', expect.objectContaining({ method: 'HEAD' }));
+  });
 });
