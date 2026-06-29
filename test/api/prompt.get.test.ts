@@ -69,4 +69,9 @@ describe('GET /prompt/get', () => {
     const response = await get.request('/');
     expect(response.status).toBe(400);
   });
+
+  it('returns 400 when clientName is empty', async () => {
+    const response = await getRequest('', 'req-1');
+    expect(response.status).toBe(400);
+  });
 });
