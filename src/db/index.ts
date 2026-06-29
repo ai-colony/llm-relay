@@ -17,6 +17,8 @@ export const database = {
 export type { SqliteError } from './errors';
 export { SQLITE_CONSTRAINT_UNIQUE } from './errors';
 
+export const closeDatabase = () => sqlite.close();
+
 export const checkDatabase = (): { ok: boolean; error?: string } => {
   try {
     client.run(sql`SELECT 1`);

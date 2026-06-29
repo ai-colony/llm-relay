@@ -1,4 +1,4 @@
-import { database } from '@db';
+import { closeDatabase, database } from '@db';
 import { serve } from '@hono/node-server';
 import { config, logger } from '@lib';
 import { getPromptStatusCounts, resetInProgressPrompts } from '@prompt/repo';
@@ -27,6 +27,8 @@ logger.info({ component: 'server', ...startupCounts }, 'DB status on startup');
 
 let isShuttingDown = false;
 
+const { promise: workerDone, resolve: workerDoneResolve } = Promise.withResolvers<void>();
+
 const workerThread = async () => {
   try {
     await processQueuedPrompts();
@@ -34,21 +36,27 @@ const workerThread = async () => {
   } catch (error) {
     logger.error({ component: 'server', error }, 'Worker thread error');
   }
-  if (!isShuttingDown) {
-    await new Promise((r) => setTimeout(r, 100));
-    setImmediate(workerThread);
+  if (isShuttingDown) {
+    workerDoneResolve();
+    return;
   }
+  await new Promise((r) => setTimeout(r, 100));
+  setImmediate(workerThread);
 };
 setImmediate(workerThread);
 
-const shutdown = () => {
+const shutdown = async () => {
   if (isShuttingDown) return;
   logger.info({ component: 'server' }, 'Shutting down...');
   isShuttingDown = true;
-  server.close(() => {
-    logger.info({ component: 'server' }, 'Server closed');
-    process.exit(0);
-  });
+
+  await Promise.race([workerDone, new Promise<void>((r) => setTimeout(r, 15_000))]);
+
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  logger.info({ component: 'server' }, 'Server closed');
+
+  closeDatabase();
+  process.exit(0);
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
