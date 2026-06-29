@@ -14,7 +14,8 @@ export const database = {
   dbSchema: schema
 };
 
-export { SQLITE_CONSTRAINT_UNIQUE, SqliteError } from './errors';
+export type { SqliteError } from './errors';
+export { SQLITE_CONSTRAINT_UNIQUE } from './errors';
 
 export const checkDatabase = (): { ok: boolean; error?: string } => {
   try {
