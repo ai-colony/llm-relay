@@ -7,7 +7,12 @@ import { migrate } from 'drizzle-orm/node-sqlite/migrator';
 
 import { app } from './hono';
 
-migrate(database.dbClient, { migrationsFolder: './drizzle' });
+try {
+  await migrate(database.dbClient, { migrationsFolder: './drizzle' });
+} catch (error) {
+  logger.error({ component: 'server', error }, 'Migration failed');
+  process.exit(1);
+}
 
 const server = serve({
   fetch: app.fetch,
