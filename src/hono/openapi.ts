@@ -231,6 +231,11 @@ const spec = {
         properties: {
           version: { type: 'string' },
           uptime: { type: 'integer', description: 'Process uptime in seconds' },
+          model: { type: 'string', description: 'Active model name; absent when the upstream is unreachable' },
+          contextSize: {
+            type: 'integer',
+            description: 'Model context window size in tokens; absent when not reported by the upstream'
+          },
           queued: { type: 'integer' },
           pending: { type: 'integer' },
           completed: { type: 'integer' },
