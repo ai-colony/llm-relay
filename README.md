@@ -95,14 +95,14 @@ Images are published to GitHub Container Registry. A new image is built and push
 
 | Tag                       | Example                                   | When to use                                                            |
 | ------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
-| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.7.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
+| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.8.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
 | `<image>@sha256:<digest>` | `ghcr.io/ai-colony/llm-relay@sha256:abc…` | Fully reproducible deployments — immune to tag mutation.               |
 
 To find the digest for a given version:
 
 ```bash
-docker pull ghcr.io/ai-colony/llm-relay:1.7.0
-docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.7.0
+docker pull ghcr.io/ai-colony/llm-relay:1.8.0
+docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.8.0
 # ghcr.io/ai-colony/llm-relay@sha256:<digest>
 ```
 
@@ -114,7 +114,7 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.7.0
+  ghcr.io/ai-colony/llm-relay:1.8.0
 ```
 
 Full — all available environment variables:
@@ -131,7 +131,7 @@ docker run -d --rm \
   -e OPENAI_TIMEOUT=10000 \
   -e OPENAI_MODEL_CACHE_TTL_SECONDS=60 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.7.0
+  ghcr.io/ai-colony/llm-relay:1.8.0
 ```
 
 Key points:
@@ -178,7 +178,7 @@ Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "uptime": 42,
   "model": "llama-3.2",
   "contextSize": 131072,
