@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **HTTP/OpenAI/callback metrics**: `GET /metrics` now also exposes `http_requests_total`/`http_request_duration_seconds` (all requests, via a new global middleware), `openai_requests_total`/`openai_request_duration_seconds` (prompt worker), `openai_chat_requests_total`/`openai_chat_request_duration_seconds` (`/chat/completions`), and `callback_deliveries_total` — labeled counters and histograms in the same Prometheus text format as the existing `llm_relay_*` gauges, backed by a new dependency-free registry in `src/lib/metrics.ts`. ([#43](https://github.com/ai-colony/llm-relay/issues/43))
+
 ### Fixed
 
+- **Callback delivery treated non-2xx responses as success**: `processCallbackPendingPrompts` never checked `response.ok` after POSTing to `callbackUrl`, so a 4xx/5xx from the receiver was logged and counted as a successful delivery. It now throws (and retries like any other failure) when the callback endpoint returns a non-2xx status.
 - **Stale model name after upstream restart**: the resolved model name and context size (used by `GET /status` and every chat/prompt request) were cached for the lifetime of the process, so restarting llama.cpp with a different model left `llm-relay` reporting the old one until it was itself restarted. The cache now expires after `OPENAI_MODEL_CACHE_TTL_SECONDS` (default `60`), so it self-heals automatically. ([#52](https://github.com/ai-colony/llm-relay/issues/52))
 
 ## [1.7.0] - 2026-06-30

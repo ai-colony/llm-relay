@@ -39,6 +39,8 @@ Hono-based REST API with Zod request validation. Routes are split by concern: pr
 
 `POST /chat/completions` is a direct streaming path that bypasses the queue entirely: it calls `streamChatCompletion` in `openAI.ts`, pipes the SSE chunks straight to the client, and propagates the client's abort signal to cancel the upstream request on disconnect.
 
+`GET /metrics` returns Prometheus text-format output combining prompt-queue gauges with request-level counters/histograms — see [Shared Library](#shared-library-srclib) below.
+
 ### Worker Loop (`src/index.ts` + `src/prompt/service.ts`)
 
 A `setImmediate` loop with a 100 ms pause between iterations. Each tick:
@@ -67,3 +69,4 @@ queued → in_progress → completed
 - **`config.ts`** — environment variable parsing via `env-var`
 - **`logger.ts`** — Pino structured JSON logger; every log includes a `component` field (`server`, `http`, `worker`, `callback`, `openai`)
 - **`openAI.ts`** — OpenAI SDK streaming wrapper; resolves the model name on first use and re-resolves it every `OPENAI_MODEL_CACHE_TTL_SECONDS` (default 60 s) so a backend restart with a different model is picked up without restarting the relay. Exports `executeOpenAIPrompt` (used by the worker — accumulates the full response, tracks reasoning vs response tokens separately, emits timing metrics on completion) and `streamChatCompletion` (used by `POST /chat/completions` — yields raw SSE chunks directly to the caller)
+- **`metrics.ts`** — dependency-free in-process Prometheus registry (`incCounter`, `observeHistogram`, `renderMetrics`) used to back `GET /metrics`. A global HTTP middleware, the worker's OpenAI call, the `/chat/completions` stream, and callback delivery each record into it, producing `http_requests_total`/`http_request_duration_seconds`, `openai_requests_total`/`openai_request_duration_seconds`, `openai_chat_requests_total`/`openai_chat_request_duration_seconds`, and `callback_deliveries_total`
