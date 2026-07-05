@@ -207,6 +207,26 @@ const StatusResponse = z.object({
 type StatusResponse = z.infer<typeof StatusResponse>;
 ```
 
+### `GET /metrics`
+
+Returns Prometheus text-exposition format (`Content-Type: text/plain; version=0.0.4`). Combines the prompt-queue gauges also shown in `GET /status` with request-level counters and histograms:
+
+| Metric                                 | Type      | Labels                         | Description                                                                                                                                              |
+| -------------------------------------- | --------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `llm_relay_prompts_queued`             | gauge     | —                              | Prompts currently queued (including `failed_retry`)                                                                                                      |
+| `llm_relay_prompts_pending`            | gauge     | —                              | Prompts currently being processed                                                                                                                        |
+| `llm_relay_prompts_completed_total`    | counter   | —                              | Prompts successfully completed                                                                                                                           |
+| `llm_relay_prompts_failed_total`       | counter   | —                              | Prompts that failed permanently                                                                                                                          |
+| `llm_relay_callbacks_pending`          | gauge     | —                              | Completed prompts awaiting callback delivery                                                                                                             |
+| `llm_relay_uptime_seconds`             | gauge     | —                              | Process uptime                                                                                                                                           |
+| `http_requests_total`                  | counter   | `method`, `path`, `status`     | HTTP requests to business endpoints (`/prompt/*`, `/chat/*`, etc. — excludes `/health`, `/status`, `/metrics`, `/openapi.json`, `/docs`, `/favicon.ico`) |
+| `http_request_duration_seconds`        | histogram | `method`, `path`               | Latency for the same requests                                                                                                                            |
+| `openai_requests_total`                | counter   | `result` (`success`/`failure`) | OpenAI completion calls from the prompt worker                                                                                                           |
+| `openai_request_duration_seconds`      | histogram | —                              | Worker OpenAI completion call latency                                                                                                                    |
+| `openai_chat_requests_total`           | counter   | `result` (`success`/`failure`) | OpenAI calls from `POST /chat/completions`                                                                                                               |
+| `openai_chat_request_duration_seconds` | histogram | —                              | `/chat/completions` full-stream latency                                                                                                                  |
+| `callback_deliveries_total`            | counter   | `result` (`success`/`failure`) | Callback POST attempts — a non-2xx response counts as `failure`                                                                                          |
+
 ### `POST /prompt/add`
 
 Enqueue a prompt. The `(clientName, requestId)` pair must be unique — re-submitting the same pair returns `409` unless `overwrite` is set to `true`.

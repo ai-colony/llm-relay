@@ -1,3 +1,4 @@
+import { renderMetrics } from '@lib';
 import { getPromptStatusCounts } from '@prompt/repo';
 import { Hono } from 'hono';
 
@@ -35,7 +36,9 @@ export const metrics = new Hono().get('/', async (c) => {
         counts.callbackPending
       ),
       metric('llm_relay_uptime_seconds', 'gauge', 'Process uptime in seconds', Math.floor(process.uptime()))
-    ].join('\n') + '\n';
+    ].join('\n') +
+    '\n' +
+    renderMetrics();
 
   return c.text(body, 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
 });

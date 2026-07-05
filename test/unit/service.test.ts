@@ -1,5 +1,7 @@
 vi.mock('@lib', () => ({
   executeOpenAIPrompt: vi.fn(),
+  incCounter: vi.fn(),
+  observeHistogram: vi.fn(),
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
   config: {
     openai: { maxRetryCount: 10 },

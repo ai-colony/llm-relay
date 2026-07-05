@@ -58,6 +58,7 @@ Prompt-specific routes each live in their own file under `src/hono/prompt/` and 
 - `DELETE /prompt/purge` bulk-deletes `completed` and `failed` records older than `days` days (default 7); accepts optional `clientName` to scope the purge.
 - `GET /prompt/list` caps results at 500 records.
 - `POST /chat/completions` proxies a chat conversation directly to the upstream LLM and streams the response as SSE (`text/event-stream`). Each event is `data: <JSON chunk>`, ending with `data: [DONE]`. This path bypasses the queue entirely — use it for interactive, low-latency chat.
+- `GET /metrics` combines the hand-rolled `llm_relay_*` prompt-queue gauges with `renderMetrics()` from `src/lib/metrics.ts`: `http_requests_total`/`http_request_duration_seconds` (recorded by the `httpMetrics` middleware in `src/hono/httpMetrics.ts`, mounted in `src/hono/index.ts`), `openai_requests_total`/`openai_request_duration_seconds` (worker path), `openai_chat_requests_total`/`openai_chat_request_duration_seconds` (`/chat/completions`), and `callback_deliveries_total`.
 
 **Business logic** — `src/prompt/` (aliased as `@prompt`)
 
@@ -65,12 +66,13 @@ Prompt-specific routes each live in their own file under `src/hono/prompt/` and 
 - `src/prompt/repo.ts` — all Drizzle database operations for the prompt lifecycle. `countQueuedPrompts()` provides a lightweight queued count (used by `POST /prompt/add`); `getPromptStatusCounts()` aggregates all status counts in a single query (used by `GET /status` and startup logging).
 
 **Shared library** — `src/lib/` (aliased as `@lib`)  
-`src/lib/index.ts` is the barrel; it re-exports `config`, `logger`, `executeOpenAIPrompt`, `isCallbackUrlAllowed`, and `checkCallbackAvailability`. Add new lib exports there when creating new modules.
+`src/lib/index.ts` is the barrel; it re-exports `config`, `logger`, `executeOpenAIPrompt`, `isCallbackUrlAllowed`, `checkCallbackAvailability`, `incCounter`, `observeHistogram`, and `renderMetrics`. Add new lib exports there when creating new modules.
 
 - `src/lib/openAI.ts` — OpenAI SDK streaming integration; lazy-resolves the model name once on first use; tracks reasoning vs response tokens separately and calculates tokens-per-second metrics. The "Sending prompt" log includes a `sizes` field with character counts for system and user prompts. Exports `executeOpenAIPrompt` (used by the worker) and `streamChatCompletion` (used by `POST /chat/completions`); only the former is re-exported from the `@lib` barrel.
 - `src/lib/config.ts` — environment variables parsed with `env-var`; see `.env.example` for all options (`PORT`, `LOG_LEVEL`, `DATABASE_FILENAME`, `OPENAI_URL/MODEL/KEY/TIMEOUT`, `OPENAI_MAX_RETRY_COUNT`, `WORKER_CONCURRENCY`, `CALLBACK_URL_ALLOWLIST`, `CALLBACK_RETRY_TTL_HOURS`, `CALLBACK_HMAC_SECRET`).
 - `src/lib/logger.ts` — Pino logger; use structured fields, not string interpolation. Every log call includes a `component` field (`'server'`, `'http'`, `'worker'`, `'callback'`, `'openai'`) to identify the source layer.
 - `src/lib/callbackUrl.ts` — `isCallbackUrlAllowed(url)` checks a URL against the `CALLBACK_URL_ALLOWLIST` regex (always passes when the env var is unset); `checkCallbackAvailability(url)` sends a `GET` probe (5 s timeout) and returns a boolean.
+- `src/lib/metrics.ts` — in-process Prometheus-text-format registry (no external dependency): `incCounter(name, help, labels, value?)` and `observeHistogram(name, help, labels, valueSeconds, buckets?)` record into module-level `Map`s keyed by metric name + sorted-serialized labels; `renderMetrics()` emits standard `# HELP`/`# TYPE` exposition text; `resetMetrics()` clears the registry (test-only, not re-exported from the barrel). Histogram buckets default to `DEFAULT_DURATION_BUCKETS = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30]` seconds.
 
 **Data layer** — `src/db/` (aliased as `@db`)  
 SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `node:sqlite` module. Schema is defined in `src/db/schema.ts`. Schema changes are **not** auto-applied — run `npm run drizzle:push` (dev) or generate+migrate (prod) after editing the schema. The `prompts` table enforces a unique index on `(clientName, requestId)` — duplicate pairs are rejected at the DB layer.
@@ -83,6 +85,7 @@ SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `n
 - **Streaming metrics**: `openAI.ts` detects the phase boundary between `reasoning_content` and `content` chunks to record separate timings and token rates. A `component: 'openai'` info log is emitted on completion with the full timing breakdown.
 - **Logging convention**: all log calls include a `component` field. `info`-level covers lifecycle events (prompt completed, callback sent, model resolved). `debug`-level adds per-request HTTP logs and prompt pick-up events — enable with `LOG_LEVEL=debug`.
 - **Model resolution**: `resolveModel()` in `openAI.ts` queries the upstream API and caches the result for `OPENAI_MODEL_CACHE_TTL_SECONDS` (default 60s), after which the next call re-queries — this lets `/status` and the model name used for requests self-heal after the backend restarts with a different model, without restarting the relay. It selects by `OPENAI_MODEL` env var or falls back to the first available model.
+- **Operational metrics**: `src/hono/httpMetrics.ts` times HTTP requests (`http_requests_total`/`http_request_duration_seconds`), skipping a hardcoded `EXCLUDED_PATHS` set (`/health`, `/status`, `/metrics`, `/openapi.json`, `/docs`, `/favicon.ico`) so monitoring/introspection traffic doesn't dilute the business-endpoint signal; `executePrompt` in `service.ts` times the worker's `executeOpenAIPrompt` call (`openai_requests_total`/`openai_request_duration_seconds`); `completions.ts` times the `/chat/completions` SSE stream (`openai_chat_requests_total`/`openai_chat_request_duration_seconds`); `processCallbackPendingPrompts` records `callback_deliveries_total{result}` and checks `response.ok` before treating a callback POST as delivered. All labels use `result="success"|"failure"` except the HTTP counter, which uses `method`/`path`/`status`.
 
 ## Branching
 
