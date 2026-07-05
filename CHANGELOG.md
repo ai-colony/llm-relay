@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Stale model name after upstream restart**: the resolved model name and context size (used by `GET /status` and every chat/prompt request) were cached for the lifetime of the process, so restarting llama.cpp with a different model left `llm-relay` reporting the old one until it was itself restarted. The cache now expires after `OPENAI_MODEL_CACHE_TTL_SECONDS` (default `60`), so it self-heals automatically. ([#52](https://github.com/ai-colony/llm-relay/issues/52))
+
 ## [1.7.0] - 2026-06-30
 
 ### Added

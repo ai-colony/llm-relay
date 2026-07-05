@@ -24,7 +24,13 @@ export const config = {
     model: envVar.get('OPENAI_MODEL').default('').asString(),
     key: envVar.get('OPENAI_KEY').default('none').asString(),
     timeout: requireMin(envVar.get('OPENAI_TIMEOUT').default(10_000).asInt(), 'OPENAI_TIMEOUT', 100),
-    maxRetryCount: requireMin(envVar.get('OPENAI_MAX_RETRY_COUNT').default(10).asInt(), 'OPENAI_MAX_RETRY_COUNT', 0)
+    maxRetryCount: requireMin(envVar.get('OPENAI_MAX_RETRY_COUNT').default(10).asInt(), 'OPENAI_MAX_RETRY_COUNT', 0),
+    modelCacheTtlMs:
+      requireMin(
+        envVar.get('OPENAI_MODEL_CACHE_TTL_SECONDS').default(60).asIntPositive(),
+        'OPENAI_MODEL_CACHE_TTL_SECONDS',
+        1
+      ) * 1000
   },
   worker: {
     concurrency: Math.min(envVar.get('WORKER_CONCURRENCY').default(1).asIntPositive(), 16)

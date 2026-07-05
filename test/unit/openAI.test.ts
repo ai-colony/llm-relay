@@ -190,8 +190,13 @@ const makeOpenAIMock = () => ({
   }
 });
 
-const makeConfigMock = (model: string) => ({
-  config: { openai: { url: 'http://test/v1', model, key: 'k', timeout: 5000 }, log: {}, http: {}, database: {} }
+const makeConfigMock = (model: string, modelCacheTtlMs = 60_000) => ({
+  config: {
+    openai: { url: 'http://test/v1', model, key: 'k', timeout: 5000, modelCacheTtlMs },
+    log: {},
+    http: {},
+    database: {}
+  }
 });
 
 const makeLoggerMock = () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } });
@@ -321,5 +326,26 @@ describe('resolveModel / resolveModelInfo', () => {
     const info = await getModelInfo();
 
     expect(info.contextSize).toBeUndefined();
+  });
+
+  it('re-resolves the model once the cache TTL has elapsed', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('', 1));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ data: [{ id: 'old-model' }] }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ data: [{ id: 'new-model' }] }) });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { getModelInfo } = await import('../../src/lib/openAI');
+    const first = await getModelInfo();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = await getModelInfo();
+
+    expect(first.model).toBe('old-model');
+    expect(second.model).toBe('new-model');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
