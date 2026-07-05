@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **HTTP/OpenAI/callback metrics**: `GET /metrics` now also exposes `http_requests_total`/`http_request_duration_seconds` (all requests, via a new global middleware), `openai_requests_total`/`openai_request_duration_seconds` (prompt worker), `openai_chat_requests_total`/`openai_chat_request_duration_seconds` (`/chat/completions`), and `callback_deliveries_total` — labeled counters and histograms in the same Prometheus text format as the existing `llm_relay_*` gauges, backed by a new dependency-free registry in `src/lib/metrics.ts`. ([#43](https://github.com/ai-colony/llm-relay/issues/43))
+- **HTTP/OpenAI/callback metrics**: `GET /metrics` now also exposes `http_requests_total`/`http_request_duration_seconds` (business endpoints only — `/health`, `/status`, `/metrics`, `/openapi.json`, `/docs`, and `/favicon.ico` are excluded to keep monitoring/introspection traffic out of the signal), `openai_requests_total`/`openai_request_duration_seconds` (prompt worker), `openai_chat_requests_total`/`openai_chat_request_duration_seconds` (`/chat/completions`), and `callback_deliveries_total` — labeled counters and histograms in the same Prometheus text format as the existing `llm_relay_*` gauges, backed by a new dependency-free registry in `src/lib/metrics.ts`. ([#43](https://github.com/ai-colony/llm-relay/issues/43))
 
 ### Fixed
 
