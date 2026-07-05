@@ -66,4 +66,4 @@ queued → in_progress → completed
 
 - **`config.ts`** — environment variable parsing via `env-var`
 - **`logger.ts`** — Pino structured JSON logger; every log includes a `component` field (`server`, `http`, `worker`, `callback`, `openai`)
-- **`openAI.ts`** — OpenAI SDK streaming wrapper; resolves the model name once on first use. Exports `executeOpenAIPrompt` (used by the worker — accumulates the full response, tracks reasoning vs response tokens separately, emits timing metrics on completion) and `streamChatCompletion` (used by `POST /chat/completions` — yields raw SSE chunks directly to the caller)
+- **`openAI.ts`** — OpenAI SDK streaming wrapper; resolves the model name on first use and re-resolves it every `OPENAI_MODEL_CACHE_TTL_SECONDS` (default 60 s) so a backend restart with a different model is picked up without restarting the relay. Exports `executeOpenAIPrompt` (used by the worker — accumulates the full response, tracks reasoning vs response tokens separately, emits timing metrics on completion) and `streamChatCompletion` (used by `POST /chat/completions` — yields raw SSE chunks directly to the caller)

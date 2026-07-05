@@ -29,21 +29,22 @@ cp .env.example .env   # then edit .env
 
 ### Environment variables
 
-| Variable                   | Default                    | Description                                                                                                                                                                  |
-| -------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                     | `3000`                     | HTTP port the relay listens on                                                                                                                                               |
-| `API_KEY`                  | _(empty)_                  | When set, all `/prompt/*` and `/chat/*` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, and `GET /metrics` remain public.                     |
-| `LOG_LEVEL`                | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`)                                                                                                                   |
-| `DATABASE_FILENAME`        | `./database.sqlite`        | Path to the SQLite database file                                                                                                                                             |
-| `OPENAI_URL`               | `http://localhost:8080/v1` | Base URL of the OpenAI-compatible API                                                                                                                                        |
-| `OPENAI_MODEL`             | _(first available model)_  | Model name to use; if empty, the first model from `/models` is used                                                                                                          |
-| `OPENAI_KEY`               | `none`                     | API key (use `none` for local servers that don't require one)                                                                                                                |
-| `OPENAI_TIMEOUT`           | `10000`                    | Per-request timeout in milliseconds                                                                                                                                          |
-| `OPENAI_MAX_RETRY_COUNT`   | `10`                       | Maximum number of transient-error retries before a prompt is permanently failed with `statusError: "max_retries_exceeded"`                                                   |
-| `WORKER_CONCURRENCY`       | `1`                        | Number of prompts processed concurrently per worker tick (capped at `16`). Increase when the upstream LLM supports parallel requests.                                        |
-| `CALLBACK_URL_ALLOWLIST`   | _(empty)_                  | Optional regex. When set, any `callbackUrl` on `POST /prompt/add` must match this pattern or the request is rejected with `400`. Use to prevent SSRF against internal hosts. |
-| `CALLBACK_RETRY_TTL_HOURS` | `24`                       | Callbacks that have been pending for longer than this many hours are skipped and not retried again.                                                                          |
-| `CALLBACK_HMAC_SECRET`     | _(empty)_                  | When set, each callback POST includes `X-LLM-Relay-Signature: hmac-sha256=<hex>` computed over the body. Lets receivers verify authenticity.                                 |
+| Variable                         | Default                    | Description                                                                                                                                                                                           |
+| -------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                           | `3000`                     | HTTP port the relay listens on                                                                                                                                                                        |
+| `API_KEY`                        | _(empty)_                  | When set, all `/prompt/*` and `/chat/*` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, and `GET /metrics` remain public.                                              |
+| `LOG_LEVEL`                      | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`)                                                                                                                                            |
+| `DATABASE_FILENAME`              | `./database.sqlite`        | Path to the SQLite database file                                                                                                                                                                      |
+| `OPENAI_URL`                     | `http://localhost:8080/v1` | Base URL of the OpenAI-compatible API                                                                                                                                                                 |
+| `OPENAI_MODEL`                   | _(first available model)_  | Model name to use; if empty, the first model from `/models` is used                                                                                                                                   |
+| `OPENAI_KEY`                     | `none`                     | API key (use `none` for local servers that don't require one)                                                                                                                                         |
+| `OPENAI_TIMEOUT`                 | `10000`                    | Per-request timeout in milliseconds                                                                                                                                                                   |
+| `OPENAI_MAX_RETRY_COUNT`         | `10`                       | Maximum number of transient-error retries before a prompt is permanently failed with `statusError: "max_retries_exceeded"`                                                                            |
+| `OPENAI_MODEL_CACHE_TTL_SECONDS` | `60`                       | How often (in seconds) to re-check the upstream `/models` endpoint for the active model name and context size, so a backend restart with a different model is picked up without restarting the relay. |
+| `WORKER_CONCURRENCY`             | `1`                        | Number of prompts processed concurrently per worker tick (capped at `16`). Increase when the upstream LLM supports parallel requests.                                                                 |
+| `CALLBACK_URL_ALLOWLIST`         | _(empty)_                  | Optional regex. When set, any `callbackUrl` on `POST /prompt/add` must match this pattern or the request is rejected with `400`. Use to prevent SSRF against internal hosts.                          |
+| `CALLBACK_RETRY_TTL_HOURS`       | `24`                       | Callbacks that have been pending for longer than this many hours are skipped and not retried again.                                                                                                   |
+| `CALLBACK_HMAC_SECRET`           | _(empty)_                  | When set, each callback POST includes `X-LLM-Relay-Signature: hmac-sha256=<hex>` computed over the body. Lets receivers verify authenticity.                                                          |
 
 ## Running
 
@@ -128,6 +129,7 @@ docker run -d --rm \
   -e OPENAI_MODEL= \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
+  -e OPENAI_MODEL_CACHE_TTL_SECONDS=60 \
   -v llm-relay-data:/app/data \
   ghcr.io/ai-colony/llm-relay:1.7.0
 ```

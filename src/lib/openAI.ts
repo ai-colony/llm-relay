@@ -33,8 +33,12 @@ const openai = new OpenAI({
 export type ModelInfo = { model: string; contextSize: number | undefined };
 
 let resolvedModelInfoPromise: Promise<ModelInfo> | undefined;
+let resolvedAt = 0;
 
 const resolveModelInfo = (): Promise<ModelInfo> => {
+  if (resolvedModelInfoPromise && Date.now() - resolvedAt > config.openai.modelCacheTtlMs)
+    resolvedModelInfoPromise = undefined;
+
   if (!resolvedModelInfoPromise)
     resolvedModelInfoPromise = (async () => {
       const requestedModel = config.openai.model;
@@ -49,6 +53,7 @@ const resolveModelInfo = (): Promise<ModelInfo> => {
       const contextSize = entry.meta?.n_ctx;
       const model = path.basename(entry.id);
       logger.info({ component: 'openai', model, contextSize }, 'Using model');
+      resolvedAt = Date.now();
       return { model, contextSize };
     })().catch((error: unknown) => {
       resolvedModelInfoPromise = undefined;
