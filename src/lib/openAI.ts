@@ -32,6 +32,10 @@ const openai = new OpenAI({
 
 export type ModelInfo = { model: string; contextSize: number | undefined };
 
+// Deliberately short and decoupled from config.openai.timeout so /health fails fast even when
+// the configured completion timeout is long.
+const HEALTH_CHECK_TIMEOUT_MS = 5000;
+
 let resolvedModelInfoPromise: Promise<ModelInfo> | undefined;
 let resolvedAt = 0;
 
@@ -75,7 +79,7 @@ export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
   try {
     response = await fetch(`${config.openai.url}/models`, {
       headers: { Authorization: `Bearer ${config.openai.key}` },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS)
     });
   } catch (error) {
     return { ok: false, error: String(error) };

@@ -6,10 +6,9 @@ import type { z } from 'zod';
 
 import { logger } from '../../lib/logger';
 import { streamChatCompletion } from '../../lib/openAI';
-import type { RelayChatRequestSchema } from './schemas';
 import { RelayChatRequestSchema as schema } from './schemas';
 
-type RelayChatRequest = z.infer<typeof RelayChatRequestSchema>;
+type RelayChatRequest = z.infer<typeof schema>;
 type StreamingApiType = Parameters<Parameters<typeof stream>[1]>[0];
 
 const writeChunks = async (s: StreamingApiType, request: RelayChatRequest, signal?: AbortSignal) => {

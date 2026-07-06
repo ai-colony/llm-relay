@@ -38,6 +38,11 @@ describe('GET /prompt/list', () => {
     expect(response.status).toBe(400);
   });
 
+  it('returns 400 when clientName is an empty string', async () => {
+    const response = await list.request('/?clientName=');
+    expect(response.status).toBe(400);
+  });
+
   it('returns an empty array when the client has no prompts', async () => {
     vi.mocked(findPromptsByClientName).mockResolvedValue([]);
 

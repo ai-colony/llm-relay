@@ -275,7 +275,9 @@ const spec = {
         type: 'object',
         properties: {
           success: { type: 'boolean', const: false },
-          error: { type: 'string' }
+          error: { type: 'string' },
+          path: { type: 'string', description: 'Request path, present on unhandled errors' },
+          method: { type: 'string', description: 'Request method, present on unhandled errors' }
         },
         required: ['success', 'error']
       },
