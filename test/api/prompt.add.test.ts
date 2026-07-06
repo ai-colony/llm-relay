@@ -85,6 +85,12 @@ describe('POST /prompt/add', () => {
     expect(body.success).toBe(false);
   });
 
+  it('propagates a non-constraint error as a 500', async () => {
+    vi.mocked(createPrompt).mockRejectedValue(new Error('database is locked'));
+    const response = await postJson(validBody);
+    expect(response.status).toBe(500);
+  });
+
   it('accepts an optional priority field', async () => {
     vi.mocked(createPrompt).mockResolvedValue(1);
     const response = await postJson({ ...validBody, priority: 3 });

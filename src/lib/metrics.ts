@@ -37,8 +37,7 @@ export const observeHistogram = (
   const key = serializeLabels(labels);
   const current = entry.values.get(key) ?? { labels, bucketCounts: buckets.map(() => 0), sum: 0, count: 0 };
 
-  for (const [index, bound] of buckets.entries())
-    if (valueSeconds <= bound) current.bucketCounts[index] = (current.bucketCounts[index] ?? 0) + 1;
+  for (const [index, bound] of buckets.entries()) if (valueSeconds <= bound) current.bucketCounts[index] += 1;
   current.sum += valueSeconds;
   current.count += 1;
 

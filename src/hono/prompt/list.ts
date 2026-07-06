@@ -4,7 +4,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 const QuerySchema = z.object({
-  clientName: z.string(),
+  clientName: z.string().min(1),
   status: z.enum(['queued', 'in_progress', 'completed', 'failed', 'failed_retry']).optional()
 });
 

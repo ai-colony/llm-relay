@@ -16,6 +16,7 @@ import {
   findPromptsByClientName,
   findQueuedPrompts,
   getPromptStatusCounts,
+  purgeCompletedPrompts,
   resetInProgressPrompts,
   updatePromptSetCallbackCompleted,
   updatePromptSetCompleted,
@@ -328,5 +329,78 @@ describe('deletePromptForOverwrite', () => {
     await deletePromptForOverwrite('test-client', 'req-1');
     const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('in_progress');
+  });
+});
+
+describe('purgeCompletedPrompts', () => {
+  it('does not purge a prompt completed just now when olderThanDays is large', async () => {
+    const id = await addPrompt(basePrompt);
+    await updatePromptsSetInProgress([Number(id)]);
+    await updatePromptSetCompleted(Number(id), completionData);
+
+    const purged = await purgeCompletedPrompts(30);
+
+    expect(purged).toBe(0);
+    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    expect(prompt).toBeDefined();
+  });
+
+  it('purges a completed prompt once the cutoff is in the future', async () => {
+    const id = await addPrompt(basePrompt);
+    await updatePromptsSetInProgress([Number(id)]);
+    await updatePromptSetCompleted(Number(id), completionData);
+
+    const purged = await purgeCompletedPrompts(-1);
+
+    expect(purged).toBe(1);
+    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    expect(prompt).toBeUndefined();
+  });
+
+  it('purges a failed prompt once the cutoff is in the future', async () => {
+    const id = await addPrompt(basePrompt);
+    await updatePromptsSetInProgress([Number(id)]);
+    await updatePromptSetFailed(Number(id), 'timeout', false);
+
+    const purged = await purgeCompletedPrompts(-1);
+
+    expect(purged).toBe(1);
+  });
+
+  it('does not purge a queued prompt even with a future cutoff', async () => {
+    await addPrompt(basePrompt);
+
+    const purged = await purgeCompletedPrompts(-1);
+
+    expect(purged).toBe(0);
+    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    expect(prompt).toBeDefined();
+  });
+
+  it('does not purge an in_progress prompt even with a future cutoff', async () => {
+    const id = await addPrompt(basePrompt);
+    await updatePromptsSetInProgress([Number(id)]);
+
+    const purged = await purgeCompletedPrompts(-1);
+
+    expect(purged).toBe(0);
+    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    expect(prompt?.status).toBe('in_progress');
+  });
+
+  it('only purges prompts matching the given clientName', async () => {
+    const idA = await addPrompt({ ...basePrompt, clientName: 'client-a' });
+    const idB = await addPrompt({ ...basePrompt, clientName: 'client-b' });
+    await updatePromptsSetInProgress([Number(idA), Number(idB)]);
+    await updatePromptSetCompleted(Number(idA), completionData);
+    await updatePromptSetCompleted(Number(idB), completionData);
+
+    const purged = await purgeCompletedPrompts(-1, 'client-a');
+
+    expect(purged).toBe(1);
+    const [promptA] = await findPromptByClientNameAndRequestId('client-a', 'req-1');
+    const [promptB] = await findPromptByClientNameAndRequestId('client-b', 'req-1');
+    expect(promptA).toBeUndefined();
+    expect(promptB).toBeDefined();
   });
 });
