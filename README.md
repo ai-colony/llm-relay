@@ -540,7 +540,7 @@ type CallbackPayload = z.infer<typeof CallbackPayload>;
 
 Callback delivery is tracked separately from prompt completion — a failed HTTP POST is logged and retried on the next worker tick (up to 50 callbacks per tick, FIFO order). Callbacks pending longer than `CALLBACK_RETRY_TTL_HOURS` (default `24`) are abandoned.
 
-**Availability check**: when `callbackUrl` is provided on `POST /prompt/add`, the relay sends a `GET` probe to that URL before accepting the request. If the probe times out or fails, the endpoint returns `503`.
+**Availability check**: when `callbackUrl` is provided on `POST /prompt/add`, the relay sends a `HEAD` probe to that URL before accepting the request. If the probe times out or fails, the endpoint returns `503`.
 
 **HMAC signing**: when `CALLBACK_HMAC_SECRET` is set, each callback POST includes an `X-LLM-Relay-Signature: hmac-sha256=<hex>` header. Receivers can verify it by computing `HMAC-SHA256(secret, body)` and comparing the hex digest.
 
