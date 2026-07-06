@@ -16,7 +16,7 @@ Local or self-hosted LLMs (e.g. llama.cpp, Ollama, vLLM) typically handle only a
 
 ## Infrastructure requirements
 
-- **Node.js** 24+ (ESM, top-level `await`)
+- **Node.js** 24 (ESM, top-level `await`)
 - **An OpenAI-compatible API** — any endpoint that implements `GET /models` and `POST /chat/completions` with streaming (llama.cpp server, Ollama, vLLM, LM Studio, the real OpenAI, etc.)
 - **SQLite** — no separate database process needed; the file is created automatically on first run
 
@@ -162,7 +162,7 @@ cp .env.example .env   # then edit .env
 node --no-warnings=ExperimentalWarning dist/index.js
 ```
 
-The production bundle is fully self-contained — no `node_modules` are needed at runtime alongside `dist/`. Ship `dist/` and `drizzle/` to any server running Node.js 24+.
+The production bundle is fully self-contained — no `node_modules` are needed at runtime alongside `dist/`. Ship `dist/` and `drizzle/` to any server running Node.js 24.
 
 ## API
 
@@ -540,7 +540,7 @@ type CallbackPayload = z.infer<typeof CallbackPayload>;
 
 Callback delivery is tracked separately from prompt completion — a failed HTTP POST is logged and retried on the next worker tick (up to 50 callbacks per tick, FIFO order). Callbacks pending longer than `CALLBACK_RETRY_TTL_HOURS` (default `24`) are abandoned.
 
-**Availability check**: when `callbackUrl` is provided on `POST /prompt/add`, the relay sends a `GET` probe to that URL before accepting the request. If the probe times out or fails, the endpoint returns `503`.
+**Availability check**: when `callbackUrl` is provided on `POST /prompt/add`, the relay sends a `HEAD` probe to that URL before accepting the request. If the probe times out or fails, the endpoint returns `503`.
 
 **HMAC signing**: when `CALLBACK_HMAC_SECRET` is set, each callback POST includes an `X-LLM-Relay-Signature: hmac-sha256=<hex>` header. Receivers can verify it by computing `HMAC-SHA256(secret, body)` and comparing the hex digest.
 
