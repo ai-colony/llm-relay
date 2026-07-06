@@ -263,6 +263,16 @@ describe('processCallbackPendingPrompts', () => {
     expect(updatePromptSetCallbackCompleted).not.toHaveBeenCalled();
   });
 
+  it('skips marking complete when the callback endpoint responds with a non-ok status', async () => {
+    const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: 'https://example.com/callback' });
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+
+    await processCallbackPendingPrompts();
+
+    expect(updatePromptSetCallbackCompleted).not.toHaveBeenCalled();
+  });
+
   it('skips prompts that have no callback URL', async () => {
     const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: null });
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);

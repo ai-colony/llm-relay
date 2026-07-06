@@ -183,4 +183,30 @@ describe('config', () => {
     expect(config.callback.hmacSecret).toBe('');
     if (saved !== undefined) process.env.CALLBACK_HMAC_SECRET = saved;
   });
+
+  it('compiles a valid CALLBACK_URL_ALLOWLIST into a RegExp', async () => {
+    const saved = process.env.CALLBACK_URL_ALLOWLIST;
+    process.env.CALLBACK_URL_ALLOWLIST = String.raw`^https://.*\.example\.com$`;
+    const { config } = await import('../../src/lib/config');
+    expect(config.callback.urlAllowlist).toBeInstanceOf(RegExp);
+    expect(config.callback.urlAllowlist?.test('https://api.example.com')).toBe(true);
+    if (saved === undefined) delete process.env.CALLBACK_URL_ALLOWLIST;
+    else process.env.CALLBACK_URL_ALLOWLIST = saved;
+  });
+
+  it('rejects an invalid CALLBACK_URL_ALLOWLIST regex', async () => {
+    const saved = process.env.CALLBACK_URL_ALLOWLIST;
+    process.env.CALLBACK_URL_ALLOWLIST = '[';
+    await expect(import('../../src/lib/config')).rejects.toThrow('is not a valid regex');
+    if (saved === undefined) delete process.env.CALLBACK_URL_ALLOWLIST;
+    else process.env.CALLBACK_URL_ALLOWLIST = saved;
+  });
+
+  it('leaves callback.urlAllowlist undefined when CALLBACK_URL_ALLOWLIST is not set', async () => {
+    const saved = process.env.CALLBACK_URL_ALLOWLIST;
+    delete process.env.CALLBACK_URL_ALLOWLIST;
+    const { config } = await import('../../src/lib/config');
+    expect(config.callback.urlAllowlist).toBeUndefined();
+    if (saved !== undefined) process.env.CALLBACK_URL_ALLOWLIST = saved;
+  });
 });
