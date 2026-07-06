@@ -40,7 +40,7 @@ Run a single test file: `npx vitest run test/unit/service.test.ts`
 
 Coverage thresholds (enforced): 60% lines / functions / branches / statements.
 
-**Runtime requirement**: Node.js 24 or 26 (ESM, top-level `await`).
+**Runtime requirement**: Node.js 24 (ESM, top-level `await`).
 
 ## Architecture
 

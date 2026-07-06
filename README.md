@@ -16,7 +16,7 @@ Local or self-hosted LLMs (e.g. llama.cpp, Ollama, vLLM) typically handle only a
 
 ## Infrastructure requirements
 
-- **Node.js** 24+ (ESM, top-level `await`)
+- **Node.js** 24 (ESM, top-level `await`)
 - **An OpenAI-compatible API** — any endpoint that implements `GET /models` and `POST /chat/completions` with streaming (llama.cpp server, Ollama, vLLM, LM Studio, the real OpenAI, etc.)
 - **SQLite** — no separate database process needed; the file is created automatically on first run
 
@@ -162,7 +162,7 @@ cp .env.example .env   # then edit .env
 node --no-warnings=ExperimentalWarning dist/index.js
 ```
 
-The production bundle is fully self-contained — no `node_modules` are needed at runtime alongside `dist/`. Ship `dist/` and `drizzle/` to any server running Node.js 24+.
+The production bundle is fully self-contained — no `node_modules` are needed at runtime alongside `dist/`. Ship `dist/` and `drizzle/` to any server running Node.js 24.
 
 ## API
 
