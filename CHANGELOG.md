@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-07-22
+
+### Fixed
+
+- **`clientName` schema in `GET /prompt/list`**: now enforces `clientName` as a non-empty string, consistent with `/prompt/add`, `/prompt/get`, and `/prompt/cancel`.
+- **OpenAPI schema**: documented the `path` and `method` fields present on unhandled-error responses.
+
+### Changed
+
+- **Dropped Node.js 26 support**: engine requirement narrowed from `24 || 26` to `24` to match tested runtimes.
+- Dependency updates (`hono`, `openai`, `@hono/node-server`, `@hono/zod-validator`, dev tooling).
+
 ## [1.8.0] - 2026-07-05
 
 ### Added
@@ -139,7 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
-[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/ai-colony/llm-relay/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/ai-colony/llm-relay/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/ai-colony/llm-relay/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/ai-colony/llm-relay/compare/v1.5.0...v1.6.0
