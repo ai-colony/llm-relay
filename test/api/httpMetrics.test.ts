@@ -1,3 +1,5 @@
+vi.mock('@lib', async () => await import('../../src/lib/metrics'));
+
 import { Hono } from 'hono';
 
 import { httpMetrics } from '../../src/hono/httpMetrics';

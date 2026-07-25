@@ -5,7 +5,8 @@ vi.mock('../../src/prompt/repo', () => ({
 import { list } from '../../src/hono/prompt/list';
 import { findPromptsByClientName } from '../../src/prompt/repo';
 
-const makeRow = (requestId: number, promptStatus: string) => ({
+const makeRow = (requestId: string, promptStatus: string) => ({
+  priority: 0,
   requestId,
   status: promptStatus,
   createdAt: new Date(),
@@ -13,8 +14,15 @@ const makeRow = (requestId: number, promptStatus: string) => ({
 });
 
 describe('GET /prompt/list', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('returns all prompts for a client', async () => {
-    vi.mocked(findPromptsByClientName).mockResolvedValue([makeRow(1, 'queued'), makeRow(2, 'completed')] as never);
+    vi.mocked(findPromptsByClientName).mockResolvedValue([
+      makeRow('req-1', 'queued'),
+      makeRow('req-2', 'completed')
+    ] as never);
 
     const response = await list.request('/?clientName=test-client');
     expect(response.status).toBe(200);
@@ -24,7 +32,7 @@ describe('GET /prompt/list', () => {
   });
 
   it('filters by status when the query parameter is provided', async () => {
-    vi.mocked(findPromptsByClientName).mockResolvedValue([makeRow(1, 'queued')] as never);
+    vi.mocked(findPromptsByClientName).mockResolvedValue([makeRow('req-1', 'queued')] as never);
 
     const response = await list.request('/?clientName=test-client&status=queued');
     expect(response.status).toBe(200);

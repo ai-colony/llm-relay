@@ -21,14 +21,14 @@ describe('DELETE /prompt/purge', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({ success: true, deleted: 42 });
-    expect(purgeCompletedPrompts).toHaveBeenCalledWith(7, 'test');
+    expect(purgeCompletedPrompts).toHaveBeenCalledWith({ clientName: 'test', olderThanDays: 7 });
   });
 
   it('defaults days to 7 when omitted', async () => {
     vi.mocked(purgeCompletedPrompts).mockResolvedValue(0);
     const response = await purge.request('/', { method: 'DELETE' });
     expect(response.status).toBe(200);
-    expect(purgeCompletedPrompts).toHaveBeenCalledWith(7, undefined);
+    expect(purgeCompletedPrompts).toHaveBeenCalledWith({ clientName: undefined, olderThanDays: 7 });
   });
 
   it('works without clientName (purges all clients)', async () => {
@@ -37,7 +37,7 @@ describe('DELETE /prompt/purge', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({ success: true, deleted: 100 });
-    expect(purgeCompletedPrompts).toHaveBeenCalledWith(30, undefined);
+    expect(purgeCompletedPrompts).toHaveBeenCalledWith({ clientName: undefined, olderThanDays: 30 });
   });
 
   it('returns 400 when days is 0', async () => {

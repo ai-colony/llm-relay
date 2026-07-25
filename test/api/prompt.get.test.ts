@@ -4,13 +4,17 @@ vi.mock('../../src/prompt/repo', () => ({
 
 import { get } from '../../src/hono/prompt/get';
 import { findPromptByClientNameAndRequestId } from '../../src/prompt/repo';
+import { withQuery } from '../helpers/mocks';
 
-const getRequest = (clientName: string, requestId: string) =>
-  get.request(`/?clientName=${encodeURIComponent(clientName)}&requestId=${encodeURIComponent(requestId)}`);
+const getRequest = (clientName: string, requestId: string) => get.request(withQuery({ clientName, requestId }));
 
 describe('GET /prompt/get', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('returns 404 when the prompt is not found', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([]);
+    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue(undefined);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(404);
     const body = await response.json();
@@ -18,7 +22,7 @@ describe('GET /prompt/get', () => {
   });
 
   it('returns the status for a queued prompt', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([{ status: 'queued' } as never]);
+    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue({ status: 'queued' } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -26,7 +30,7 @@ describe('GET /prompt/get', () => {
   });
 
   it('returns the status for an in_progress prompt', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([{ status: 'in_progress' } as never]);
+    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue({ status: 'in_progress' } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -34,17 +38,15 @@ describe('GET /prompt/get', () => {
   });
 
   it('returns the full result for a completed prompt', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([
-      {
-        status: 'completed',
-        reasoning: 'deep thought',
-        response: 'final answer',
-        reasoningTimeMs: 100,
-        reasoningTokenPerSecond: 10,
-        responseTimeMs: 200,
-        responseTokenPerSecond: 20
-      } as never
-    ]);
+    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue({
+      status: 'completed',
+      reasoning: 'deep thought',
+      response: 'final answer',
+      reasoningTimeMs: 100,
+      reasoningTokenPerSecond: 10,
+      responseTimeMs: 200,
+      responseTokenPerSecond: 20
+    } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -55,9 +57,10 @@ describe('GET /prompt/get', () => {
   });
 
   it('returns the status and error for a failed prompt', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([
-      { status: 'failed', statusError: 'upstream timeout' } as never
-    ]);
+    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue({
+      status: 'failed',
+      statusError: 'upstream timeout'
+    } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
     const body = await response.json();

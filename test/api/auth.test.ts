@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 
-vi.mock('../../src/lib/logger', () => ({
-  logger: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() }
-}));
+vi.mock('../../src/lib/logger', async () => {
+  const { makeLoggerMock } = await import('../helpers/mocks');
+  return { logger: makeLoggerMock() };
+});
 
 import { createAuthMiddleware } from '../../src/hono/auth';
 
