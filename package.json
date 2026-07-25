@@ -62,7 +62,7 @@
     "@typescript-eslint/parser": "^8.65.0",
     "@vitest/coverage-v8": "^4.1.10",
     "drizzle-kit": "^1.0.0-beta.22",
-    "eslint": "^10.7.0",
+    "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^14.0.0",
     "eslint-plugin-unicorn": "^72.0.0",
@@ -83,8 +83,8 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^1.0.0-beta.22",
     "env-var": "^7.5.0",
-    "hono": "^4.12.31",
-    "openai": "^6.48.0",
+    "hono": "^4.12.32",
+    "openai": "^6.49.0",
     "pino": "^10.3.1",
     "zod": "^4.4.3"
   }
