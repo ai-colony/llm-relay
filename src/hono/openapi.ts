@@ -1,12 +1,59 @@
+import { PROMPT_STATUSES } from '@db/schema';
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { z } from 'zod';
 
 import { version } from '../../package.json';
+import { RelayChatRequestSchema } from './chat/schemas';
+import { AddPromptBodySchema, ListQuerySchema, PromptKeyQuerySchema, PurgeQuerySchema } from './prompt/schemas';
 
-const PROMPT_STATUS_SCHEMA = {
-  type: 'string',
-  enum: ['queued', 'in_progress', 'completed', 'failed', 'failed_retry']
-} as const;
+type JsonSchema = Record<string, unknown>;
+
+// Drops the $schema marker and the explicit MAX_SAFE_INTEGER bound that z.int() emits — both are
+// noise in a published contract.
+const clean = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map((item) => clean(item));
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value as JsonSchema)
+      .filter(([key, entry]) => key !== '$schema' && !(key === 'maximum' && entry === Number.MAX_SAFE_INTEGER))
+      .map(([key, entry]) => [key, clean(entry)])
+  );
+};
+
+// Request schemas are generated from the Zod schemas the routes actually validate with, so the two
+// can never drift. `io: 'input'` describes what a client sends (defaults optional, before coercion).
+const fromZod = (schema: z.ZodType): JsonSchema => clean(z.toJSONSchema(schema, { io: 'input' })) as JsonSchema;
+
+// Turns an object schema into an OpenAPI `parameters` array for query-string routes.
+const queryParameters = (schema: z.ZodType) => {
+  const generated = fromZod(schema);
+  const properties = (generated['properties'] ?? {}) as Record<string, JsonSchema>;
+  const required = new Set((generated['required'] ?? []) as string[]);
+  return Object.entries(properties).map(([name, property]) => ({
+    name,
+    in: 'query',
+    required: required.has(name),
+    schema: property
+  }));
+};
+
+const jsonContent = (schema: JsonSchema) => ({ 'application/json': { schema } });
+const reference = (name: string) => ({ $ref: `#/components/schemas/${name}` });
+
+const errorResponse = (description: string) => ({ description, content: jsonContent(reference('ErrorResponse')) });
+const validationErrorResponse = {
+  description: 'Request failed schema validation',
+  content: jsonContent(reference('ValidationErrorResponse'))
+};
+const unauthorizedResponse = errorResponse('Missing or invalid Bearer token (only when API_KEY is configured)');
+const serverErrorResponse = errorResponse('Unhandled server error');
+
+// `secured` marks the routes behind the auth middleware (/prompt/*, /chat/*); `unauthenticated` is
+// the explicit "no auth required" form, clearer than omitting the key on the always-open routes.
+const secured = { security: [{ bearerAuth: [] }] };
+const unauthenticated = { security: [] };
+const authedResponses = { '401': unauthorizedResponse, '500': serverErrorResponse };
 
 const spec = {
   openapi: '3.1.0',
@@ -16,47 +63,51 @@ const spec = {
     description:
       'HTTP relay server that queues LLM prompts against OpenAI-compatible APIs with SQLite persistence and async callback delivery.'
   },
+  servers: [{ url: '/', description: 'The relay itself; base path depends on how it is deployed.' }],
   paths: {
     '/health': {
       get: {
         operationId: 'getHealth',
+        ...unauthenticated,
         summary: 'Health check',
         description: 'Returns 503 if either the SQLite database or the upstream OpenAI endpoint is unavailable.',
         responses: {
-          '200': {
-            description: 'All systems healthy',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthResponse' } } }
-          },
-          '503': {
-            description: 'One or more systems unhealthy',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthResponse' } } }
-          }
+          '200': { description: 'All systems healthy', content: jsonContent(reference('HealthResponse')) },
+          '503': { description: 'One or more systems unhealthy', content: jsonContent(reference('HealthResponse')) }
         }
       }
     },
     '/metrics': {
       get: {
         operationId: 'getMetrics',
+        ...unauthenticated,
         summary: 'Prometheus metrics',
         description: 'Returns queue depths, processing rates, and error counts in Prometheus text exposition format.',
-        responses: {
-          '200': {
-            description: 'OK',
-            content: { 'text/plain': { schema: { type: 'string' } } }
-          }
-        }
+        responses: { '200': { description: 'OK', content: { 'text/plain': { schema: { type: 'string' } } } } }
       }
     },
     '/status': {
       get: {
         operationId: 'getStatus',
+        ...unauthenticated,
         summary: 'Server status and queue counts',
-        responses: {
-          '200': {
-            description: 'OK',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/StatusResponse' } } }
-          }
-        }
+        responses: { '200': { description: 'OK', content: jsonContent(reference('StatusResponse')) } }
+      }
+    },
+    '/openapi.json': {
+      get: {
+        operationId: 'getOpenapiDocument',
+        ...unauthenticated,
+        summary: 'This OpenAPI document',
+        responses: { '200': { description: 'OK', content: jsonContent({ type: 'object' }) } }
+      }
+    },
+    '/docs': {
+      get: {
+        operationId: 'getDocs',
+        ...unauthenticated,
+        summary: 'Swagger UI',
+        responses: { '200': { description: 'OK', content: { 'text/html': { schema: { type: 'string' } } } } }
       }
     },
     '/prompt/add': {
@@ -65,19 +116,14 @@ const spec = {
         summary: 'Queue a new prompt',
         description:
           'Adds a prompt to the queue identified by (clientName, requestId). Set overwrite=true to replace an existing non-in-progress prompt.',
-        requestBody: {
-          required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/AddPromptBody' } } }
-        },
+        ...secured,
+        requestBody: { required: true, content: jsonContent(reference('AddPromptBody')) },
         responses: {
-          '201': {
-            description: 'Prompt queued',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/AddPromptResponse' } } }
-          },
-          '409': {
-            description: 'Duplicate (clientName, requestId) or in-progress overwrite attempt',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
-          }
+          '201': { description: 'Prompt queued', content: jsonContent(reference('AddPromptResponse')) },
+          '400': validationErrorResponse,
+          '409': errorResponse('Duplicate (clientName, requestId) or in-progress overwrite attempt'),
+          '503': errorResponse('callbackUrl did not answer the reachability probe'),
+          ...authedResponses
         }
       }
     },
@@ -85,19 +131,13 @@ const spec = {
       get: {
         operationId: 'getPrompt',
         summary: 'Get prompt status and result',
-        parameters: [
-          { name: 'clientName', in: 'query', required: true, schema: { type: 'string' } },
-          { name: 'requestId', in: 'query', required: true, schema: { type: 'string', minLength: 1 } }
-        ],
+        ...secured,
+        parameters: queryParameters(PromptKeyQuerySchema),
         responses: {
-          '200': {
-            description: 'Prompt found',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/GetPromptResponse' } } }
-          },
-          '404': {
-            description: 'Prompt not found',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
-          }
+          '200': { description: 'Prompt found', content: jsonContent(reference('GetPromptResponse')) },
+          '400': validationErrorResponse,
+          '404': errorResponse('Prompt not found'),
+          ...authedResponses
         }
       }
     },
@@ -106,19 +146,28 @@ const spec = {
         operationId: 'listPrompts',
         summary: 'List prompts for a client',
         description: 'Returns up to 500 prompts ordered by creation time. Filter by status to narrow results.',
-        parameters: [
-          { name: 'clientName', in: 'query', required: true, schema: { type: 'string' } },
-          { name: 'status', in: 'query', required: false, schema: PROMPT_STATUS_SCHEMA }
-        ],
+        ...secured,
+        parameters: queryParameters(ListQuerySchema),
         responses: {
-          '200': {
-            description: 'OK',
-            content: {
-              'application/json': {
-                schema: { type: 'array', items: { $ref: '#/components/schemas/PromptListItem' } }
-              }
-            }
-          }
+          '200': { description: 'OK', content: jsonContent({ type: 'array', items: reference('PromptListItem') }) },
+          '400': validationErrorResponse,
+          ...authedResponses
+        }
+      }
+    },
+    '/prompt/cancel': {
+      delete: {
+        operationId: 'cancelPrompt',
+        summary: 'Cancel and delete a prompt',
+        description: 'Deletes the prompt record. Only allowed for queued, failed, and failed_retry statuses.',
+        ...secured,
+        parameters: queryParameters(PromptKeyQuerySchema),
+        responses: {
+          '200': { description: 'Cancelled', content: jsonContent(reference('SuccessResponse')) },
+          '400': validationErrorResponse,
+          '404': errorResponse('Prompt not found'),
+          '409': errorResponse('Cannot cancel – prompt is in_progress or completed'),
+          ...authedResponses
         }
       }
     },
@@ -128,15 +177,12 @@ const spec = {
         summary: 'Purge old completed and failed prompts',
         description:
           'Deletes completed and failed prompts older than the given number of days. Optionally scoped to a single client.',
-        parameters: [
-          { name: 'clientName', in: 'query', required: false, schema: { type: 'string' } },
-          { name: 'days', in: 'query', required: false, schema: { type: 'integer', minimum: 1, default: 7 } }
-        ],
+        ...secured,
+        parameters: queryParameters(PurgeQuerySchema),
         responses: {
-          '200': {
-            description: 'Purge complete',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/PurgeResponse' } } }
-          }
+          '200': { description: 'Purge complete', content: jsonContent(reference('PurgeResponse')) },
+          '400': validationErrorResponse,
+          ...authedResponses
         }
       }
     },
@@ -145,11 +191,9 @@ const spec = {
         operationId: 'chatCompletions',
         summary: 'Streaming chat completions',
         description:
-          'Proxies a chat conversation to the upstream LLM and streams the response as Server-Sent Events. Each event is `data: <JSON chunk>` ending with `data: [DONE]`. Requires Bearer auth when API_KEY is configured.',
-        requestBody: {
-          required: true,
-          content: { 'application/json': { schema: { $ref: '#/components/schemas/ChatCompletionsBody' } } }
-        },
+          'Proxies a chat conversation to the upstream LLM and streams the response as Server-Sent Events. Each event is `data: <JSON chunk>` ending with `data: [DONE]`. Bypasses the prompt queue entirely.',
+        ...secured,
+        requestBody: { required: true, content: jsonContent(reference('ChatCompletionsBody')) },
         responses: {
           '200': {
             description: 'SSE stream of chat completion chunks',
@@ -160,49 +204,26 @@ const spec = {
               }
             }
           },
-          '400': {
-            description: 'Invalid request body',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
-          }
-        }
-      }
-    },
-    '/prompt/cancel': {
-      delete: {
-        operationId: 'cancelPrompt',
-        summary: 'Cancel and delete a prompt',
-        description: 'Deletes the prompt record. Only allowed for queued, failed, and failed_retry statuses.',
-        parameters: [
-          { name: 'clientName', in: 'query', required: true, schema: { type: 'string' } },
-          { name: 'requestId', in: 'query', required: true, schema: { type: 'string', minLength: 1 } }
-        ],
-        responses: {
-          '200': {
-            description: 'Cancelled',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: { success: { type: 'boolean', const: true } },
-                  required: ['success']
-                }
-              }
-            }
-          },
-          '404': {
-            description: 'Prompt not found',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
-          },
-          '409': {
-            description: 'Cannot cancel – prompt is in_progress or completed',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
-          }
+          '400': validationErrorResponse,
+          ...authedResponses
         }
       }
     }
   },
   components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        description: 'Set to the relay API_KEY. Auth is disabled entirely when API_KEY is empty.'
+      }
+    },
     schemas: {
+      // --- Generated from the Zod schemas the routes validate with -----------------------------
+      AddPromptBody: fromZod(AddPromptBodySchema),
+      ChatCompletionsBody: fromZod(RelayChatRequestSchema),
+
+      // --- Hand-written response envelopes ----------------------------------------------------
       HealthCheck: {
         type: 'object',
         properties: {
@@ -217,10 +238,7 @@ const spec = {
           success: { type: 'boolean' },
           checks: {
             type: 'object',
-            properties: {
-              db: { $ref: '#/components/schemas/HealthCheck' },
-              openai: { $ref: '#/components/schemas/HealthCheck' }
-            },
+            properties: { db: reference('HealthCheck'), openai: reference('HealthCheck') },
             required: ['db', 'openai']
           }
         },
@@ -237,31 +255,12 @@ const spec = {
             description: 'Model context window size in tokens; absent when not reported by the upstream'
           },
           queued: { type: 'integer' },
-          pending: { type: 'integer' },
+          inProgress: { type: 'integer' },
           completed: { type: 'integer' },
           failed: { type: 'integer' },
           callbackPending: { type: 'integer' }
         },
-        required: ['version', 'uptime', 'queued', 'pending', 'completed', 'failed', 'callbackPending']
-      },
-      AddPromptBody: {
-        type: 'object',
-        properties: {
-          clientName: { type: 'string', minLength: 1 },
-          requestId: { type: 'string', minLength: 1 },
-          callbackUrl: { type: 'string', format: 'uri', description: 'POSTed to after the prompt completes' },
-          systemPrompt: { type: 'string' },
-          userPrompt: { type: 'string', minLength: 1 },
-          temperature: { type: 'number', minimum: 0, maximum: 2 },
-          priority: {
-            type: 'integer',
-            minimum: 0,
-            default: 0,
-            description: 'Lower value = higher priority (processed first)'
-          },
-          overwrite: { type: 'boolean', default: false, description: 'Replace existing non-in-progress prompt' }
-        },
-        required: ['clientName', 'requestId', 'userPrompt', 'temperature']
+        required: ['version', 'uptime', 'queued', 'inProgress', 'completed', 'failed', 'callbackPending']
       },
       AddPromptResponse: {
         type: 'object',
@@ -270,6 +269,19 @@ const spec = {
           queued: { type: 'integer', description: 'Total prompts currently queued' }
         },
         required: ['success', 'queued']
+      },
+      SuccessResponse: {
+        type: 'object',
+        properties: { success: { type: 'boolean', const: true } },
+        required: ['success']
+      },
+      PurgeResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', const: true },
+          deleted: { type: 'integer', description: 'Number of records deleted' }
+        },
+        required: ['success', 'deleted']
       },
       ErrorResponse: {
         type: 'object',
@@ -281,12 +293,26 @@ const spec = {
         },
         required: ['success', 'error']
       },
-      PromptStatus: PROMPT_STATUS_SCHEMA,
+      ValidationErrorResponse: {
+        type: 'object',
+        description: 'Emitted by the request validator; `error` is an object here, not a string.',
+        properties: {
+          success: { type: 'boolean', const: false },
+          error: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', const: 'ZodError' },
+              message: { type: 'string', description: 'JSON-encoded array of validation issues' }
+            },
+            required: ['name', 'message']
+          }
+        },
+        required: ['success', 'error']
+      },
+      PromptStatus: { type: 'string', enum: [...PROMPT_STATUSES] },
       GetPromptResponsePending: {
         type: 'object',
-        properties: {
-          status: { type: 'string', enum: ['queued', 'in_progress', 'failed_retry'] }
-        },
+        properties: { status: { type: 'string', enum: ['queued', 'in_progress', 'failed_retry'] } },
         required: ['status']
       },
       GetPromptResponseFailed: {
@@ -304,9 +330,9 @@ const spec = {
           reasoning: { type: ['string', 'null'] },
           response: { type: ['string', 'null'] },
           reasoningTimeMs: { type: ['integer', 'null'] },
-          reasoningTokenPerSecond: { type: ['number', 'null'] },
+          reasoningTokenPerSecond: { type: ['integer', 'null'] },
           responseTimeMs: { type: ['integer', 'null'] },
-          responseTokenPerSecond: { type: ['number', 'null'] }
+          responseTokenPerSecond: { type: ['integer', 'null'] }
         },
         required: [
           'status',
@@ -320,9 +346,9 @@ const spec = {
       },
       GetPromptResponse: {
         oneOf: [
-          { $ref: '#/components/schemas/GetPromptResponsePending' },
-          { $ref: '#/components/schemas/GetPromptResponseFailed' },
-          { $ref: '#/components/schemas/GetPromptResponseCompleted' }
+          reference('GetPromptResponsePending'),
+          reference('GetPromptResponseFailed'),
+          reference('GetPromptResponseCompleted')
         ],
         discriminator: { propertyName: 'status' }
       },
@@ -331,85 +357,11 @@ const spec = {
         properties: {
           priority: { type: 'integer', minimum: 0 },
           requestId: { type: 'string' },
-          status: { $ref: '#/components/schemas/PromptStatus' },
+          status: reference('PromptStatus'),
           createdAt: { type: 'string', format: 'date-time' },
           completedAt: { type: ['string', 'null'], format: 'date-time' }
         },
         required: ['priority', 'requestId', 'status', 'createdAt', 'completedAt']
-      },
-      PurgeResponse: {
-        type: 'object',
-        properties: {
-          success: { type: 'boolean', const: true },
-          deleted: { type: 'integer', description: 'Number of records deleted' }
-        },
-        required: ['success', 'deleted']
-      },
-      RelayToolCall: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          type: { type: 'string', const: 'function' },
-          function: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              arguments: { type: 'string', description: 'JSON-encoded function arguments' }
-            },
-            required: ['name', 'arguments']
-          }
-        },
-        required: ['id', 'type', 'function']
-      },
-      ChatMessage: {
-        type: 'object',
-        properties: {
-          role: { type: 'string', enum: ['system', 'user', 'assistant', 'tool'] },
-          content: { type: ['string', 'null'], description: 'Message text; null for tool-call-only assistant turns' },
-          tool_calls: { type: 'array', items: { $ref: '#/components/schemas/RelayToolCall' } },
-          tool_call_id: { type: 'string', description: 'Required when role is tool' },
-          name: { type: 'string' }
-        },
-        required: ['role']
-      },
-      ChatTool: {
-        type: 'object',
-        properties: {
-          type: { type: 'string', const: 'function' },
-          function: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              description: { type: 'string' },
-              parameters: { type: 'object', additionalProperties: true }
-            },
-            required: ['name', 'parameters']
-          }
-        },
-        required: ['type', 'function']
-      },
-      ChatCompletionsBody: {
-        type: 'object',
-        properties: {
-          messages: {
-            type: 'array',
-            items: { $ref: '#/components/schemas/ChatMessage' },
-            minItems: 1,
-            description: 'Conversation history in OpenAI message format'
-          },
-          tools: {
-            type: 'array',
-            items: { $ref: '#/components/schemas/ChatTool' },
-            description: 'Optional tool/function definitions available to the model'
-          },
-          temperature: {
-            type: 'number',
-            minimum: 0,
-            maximum: 2,
-            description: 'Sampling temperature (0–2). Omit to use the model default.'
-          }
-        },
-        required: ['messages']
       }
     }
   }
