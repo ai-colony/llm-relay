@@ -8,7 +8,7 @@ import { migrate } from 'drizzle-orm/node-sqlite/migrator';
 import { app } from './hono';
 
 try {
-  await migrate(database.client, { migrationsFolder: './drizzle' });
+  migrate(database.client, { migrationsFolder: './drizzle' });
 } catch (error) {
   logger.error({ component: 'server', error }, 'Migration failed');
   process.exit(1);
