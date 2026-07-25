@@ -10,7 +10,7 @@ import { getModelInfo } from '@lib';
 
 import { status } from '../../src/hono/status';
 import { getPromptStatusCounts } from '../../src/prompt/repo';
-import { makeStatusCounts } from '../helpers/mocks';
+import { makeStatusCounts, readJson } from '../helpers/mocks';
 
 describe('GET /status', () => {
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('GET /status', () => {
 
     const response = await status.request('/');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.queued).toBe(2);
     expect(body.inProgress).toBe(1);
     expect(body.completed).toBe(10);
@@ -43,7 +43,7 @@ describe('GET /status', () => {
 
     const response = await status.request('/');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.model).toBeUndefined();
     expect(body.contextSize).toBeUndefined();
     expect(body.queued).toBe(2);

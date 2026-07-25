@@ -6,6 +6,7 @@ vi.mock('../../src/lib/logger', async () => {
 });
 
 import { createAuthMiddleware } from '../../src/hono/auth';
+import { readJson } from '../helpers/mocks';
 
 function makeApp(apiKey: string) {
   return new Hono().use('/*', createAuthMiddleware(apiKey)).get('/test', (c) => c.json({ success: true }));
@@ -26,7 +27,7 @@ describe('createAuthMiddleware', () => {
     it('returns 401 when Authorization header is missing', async () => {
       const response = await app.request('/test');
       expect(response.status).toBe(401);
-      const body = await response.json();
+      const body = await readJson(response);
       expect(body).toEqual({ success: false, error: 'Unauthorized' });
     });
 
@@ -43,7 +44,7 @@ describe('createAuthMiddleware', () => {
     it('passes through with the correct Bearer token', async () => {
       const response = await app.request('/test', { headers: { Authorization: 'Bearer secret' } });
       expect(response.status).toBe(200);
-      const body = await response.json();
+      const body = await readJson(response);
       expect(body).toEqual({ success: true });
     });
   });

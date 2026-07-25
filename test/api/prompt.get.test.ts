@@ -4,7 +4,7 @@ vi.mock('../../src/prompt/repo', () => ({
 
 import { get } from '../../src/hono/prompt/get';
 import { findPromptByClientNameAndRequestId } from '../../src/prompt/repo';
-import { withQuery } from '../helpers/mocks';
+import { readJson, withQuery } from '../helpers/mocks';
 
 const getRequest = (clientName: string, requestId: string) => get.request(withQuery({ clientName, requestId }));
 
@@ -17,7 +17,7 @@ describe('GET /prompt/get', () => {
     vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue(undefined);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(404);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
   });
 
@@ -25,7 +25,7 @@ describe('GET /prompt/get', () => {
     vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue({ status: 'queued' } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.status).toBe('queued');
   });
 
@@ -33,7 +33,7 @@ describe('GET /prompt/get', () => {
     vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue({ status: 'in_progress' } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.status).toBe('in_progress');
   });
 
@@ -49,7 +49,7 @@ describe('GET /prompt/get', () => {
     } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.status).toBe('completed');
     expect(body.reasoning).toBe('deep thought');
     expect(body.response).toBe('final answer');
@@ -63,7 +63,7 @@ describe('GET /prompt/get', () => {
     } as never);
     const response = await getRequest('test', 'req-1');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.status).toBe('failed');
     expect(body.statusError).toBe('upstream timeout');
   });

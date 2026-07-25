@@ -10,6 +10,7 @@ import { checkDatabase } from '@db';
 import { checkOpenAI } from '@lib';
 
 import { health } from '../../src/hono/health';
+import { readJson } from '../helpers/mocks';
 
 describe('GET /health', () => {
   it('returns 200 with success true when all checks pass', async () => {
@@ -18,7 +19,7 @@ describe('GET /health', () => {
 
     const response = await health.request('/');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(true);
     expect(body.checks.db.ok).toBe(true);
     expect(body.checks.openai.ok).toBe(true);
@@ -30,7 +31,7 @@ describe('GET /health', () => {
 
     const response = await health.request('/');
     expect(response.status).toBe(503);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
     expect(body.checks.db.ok).toBe(false);
     expect(body.checks.db.error).toBe('cannot open database');
@@ -42,7 +43,7 @@ describe('GET /health', () => {
 
     const response = await health.request('/');
     expect(response.status).toBe(503);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
     expect(body.checks.openai.ok).toBe(false);
   });

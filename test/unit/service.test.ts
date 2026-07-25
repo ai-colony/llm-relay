@@ -9,7 +9,7 @@ vi.mock('@lib', async () => {
     config: {
       openai: { maxRetryCount: 10 },
       worker: { concurrency: 1 },
-      callback: { retryTtlHours: 24, hmacSecret: '' }
+      callback: { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: '' }
     }
   };
 });
@@ -330,7 +330,7 @@ describe('processCallbackPendingPrompts', () => {
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     const mockFetch = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', mockFetch);
-    vi.mocked(config).callback = { retryTtlHours: 24, hmacSecret: '' };
+    vi.mocked(config).callback = { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: '' };
 
     await processCallbackPendingPrompts();
 
@@ -343,7 +343,7 @@ describe('processCallbackPendingPrompts', () => {
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     const mockFetch = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', mockFetch);
-    vi.mocked(config).callback = { retryTtlHours: 24, hmacSecret: 'mysecret' };
+    vi.mocked(config).callback = { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: 'mysecret' };
 
     await processCallbackPendingPrompts();
 

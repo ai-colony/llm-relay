@@ -19,7 +19,12 @@ export const makeStatusCounts = (overrides: Partial<StatusCounts> = {}): StatusC
 });
 
 // Structural, so it accepts any of the route sub-apps regardless of their Hono type parameters.
-type RequestableApp = { request: (path: string, init?: RequestInit) => Promise<Response> };
+// Hono's `request` is sync-or-async depending on the handler, hence the union.
+type RequestableApp = { request: (path: string, init?: RequestInit) => Response | Promise<Response> };
+
+// Response.json() is typed `unknown`; tests assert on ad-hoc fields of the JSON envelope, and
+// `noPropertyAccessFromIndexSignature` rules out a Record<string, unknown> return here.
+export const readJson = (response: Response): Promise<any> => response.json();
 
 export const postJson = (app: RequestableApp, body: unknown) =>
   app.request('/', {
@@ -31,5 +36,6 @@ export const postJson = (app: RequestableApp, body: unknown) =>
 // Builds `/?a=1&b=2`; undefined values are omitted so callers can pass optional params inline.
 export const withQuery = (parameters: Record<string, string | number | undefined>) => {
   const entries = Object.entries(parameters).filter(([, value]) => value !== undefined);
-  return `/?${new URLSearchParams(entries.map(([key, value]) => [key, String(value)])).toString()}`;
+  const pairs: [string, string][] = entries.map(([key, value]) => [key, String(value)]);
+  return `/?${new URLSearchParams(pairs).toString()}`;
 };

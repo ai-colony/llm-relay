@@ -23,9 +23,11 @@ coverage/
 
 # Dev-only config
 vitest.config.ts
+tsconfig.test.json
 eslint.config.mjs
 .prettierignore
 .gitignore
+.claude/
 
 # Docs & assets
 *.md

@@ -4,11 +4,10 @@ vi.mock('../../src/prompt/repo', () => ({
 
 import { purge } from '../../src/hono/prompt/purge';
 import { purgeCompletedPrompts } from '../../src/prompt/repo';
+import { readJson, withQuery } from '../helpers/mocks';
 
-const deleteRequest = (parameters: Record<string, string | number>) => {
-  const qs = new URLSearchParams(Object.entries(parameters).map(([k, v]) => [k, String(v)])).toString();
-  return purge.request(`/?${qs}`, { method: 'DELETE' });
-};
+const deleteRequest = (parameters: Record<string, string | number>) =>
+  purge.request(withQuery(parameters), { method: 'DELETE' });
 
 describe('DELETE /prompt/purge', () => {
   beforeEach(() => {
@@ -19,7 +18,7 @@ describe('DELETE /prompt/purge', () => {
     vi.mocked(purgeCompletedPrompts).mockResolvedValue(42);
     const response = await deleteRequest({ clientName: 'test', days: 7 });
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body).toEqual({ success: true, deleted: 42 });
     expect(purgeCompletedPrompts).toHaveBeenCalledWith({ clientName: 'test', olderThanDays: 7 });
   });
@@ -35,7 +34,7 @@ describe('DELETE /prompt/purge', () => {
     vi.mocked(purgeCompletedPrompts).mockResolvedValue(100);
     const response = await deleteRequest({ days: 30 });
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body).toEqual({ success: true, deleted: 100 });
     expect(purgeCompletedPrompts).toHaveBeenCalledWith({ clientName: undefined, olderThanDays: 30 });
   });

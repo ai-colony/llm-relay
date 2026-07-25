@@ -20,7 +20,7 @@ import {
   findPromptStatusByKey,
   OVERWRITABLE_STATUSES
 } from '../../src/prompt/repo';
-import { postJson as post } from '../helpers/mocks';
+import { postJson as post, readJson } from '../helpers/mocks';
 
 const validBody = { clientName: 'my-client', requestId: 'req-1', userPrompt: 'hello', temperature: 0.7 };
 
@@ -50,7 +50,7 @@ describe('POST /prompt/add', () => {
     vi.mocked(addPrompt).mockResolvedValue(1);
     const response = await postJson(validBody);
     expect(response.status).toBe(201);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(true);
     expect(body.queued).toBe(1);
   });
@@ -84,7 +84,7 @@ describe('POST /prompt/add', () => {
     vi.mocked(addPrompt).mockRejectedValue(makeUniqueConstraintError());
     const response = await postJson(validBody);
     expect(response.status).toBe(409);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
   });
 
@@ -144,7 +144,7 @@ describe('POST /prompt/add', () => {
       vi.mocked(findPromptStatusByKey).mockResolvedValue({ status: 'in_progress' });
       const response = await postJson({ ...validBody, overwrite: true });
       expect(response.status).toBe(409);
-      const body = await response.json();
+      const body = await readJson(response);
       expect(body.success).toBe(false);
       expect(vi.mocked(deletePromptByKey)).not.toHaveBeenCalled();
     });
@@ -190,7 +190,7 @@ describe('POST /prompt/add', () => {
       vi.mocked(checkCallbackAvailability).mockResolvedValue(false);
       const response = await postJson({ ...validBody, callbackUrl: 'https://example.com/callback' });
       expect(response.status).toBe(503);
-      const body = await response.json();
+      const body = await readJson(response);
       expect(body.success).toBe(false);
       expect(body.error).toBe('callbackUrl is not available');
     });

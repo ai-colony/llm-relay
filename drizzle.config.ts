@@ -7,5 +7,8 @@ export default defineConfig({
   dbCredentials: {
     url: config.database.filename
   },
-  schema: './src/db/schema.ts'
+  schema: './src/db/schema.ts',
+  // Explicit rather than relying on the default: the Dockerfile copies ./drizzle into the image and
+  // src/index.ts applies migrations from that exact path on startup.
+  out: './drizzle'
 });

@@ -15,7 +15,8 @@ const validMessages = [{ role: 'user', content: 'Hello' }];
 
 const postJson = (body: unknown) => post(completions, body);
 
-async function* makeChunks(chunks: object[]) {
+// Yields `any` so the loose chunk literals below satisfy streamChatCompletion's RelayChunk generic.
+async function* makeChunks(chunks: object[]): AsyncGenerator<any> {
   for (const chunk of chunks) yield chunk;
 }
 

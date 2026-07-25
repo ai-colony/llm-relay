@@ -6,12 +6,13 @@ import { z } from 'zod';
 
 import { openapi } from '../../src/hono/openapi';
 import { AddPromptBodySchema } from '../../src/hono/prompt/schemas';
+import { readJson } from '../helpers/mocks';
 
 type Operation = { responses: Record<string, unknown>; security?: unknown[] };
 
 const getSpec = async () => {
   const response = await openapi.request('/openapi.json');
-  return (await response.json()) as {
+  return (await readJson(response)) as {
     paths: Record<string, Record<string, Operation>>;
     components: { schemas: Record<string, Record<string, unknown>>; securitySchemes: Record<string, unknown> };
   };
@@ -32,7 +33,7 @@ describe('GET /openapi.json', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/json');
 
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.openapi).toBe('3.1.0');
     expect(body.info.title).toBe('LLM Relay');
     expect(body.paths).toHaveProperty('/health');

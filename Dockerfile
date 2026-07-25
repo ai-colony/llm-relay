@@ -13,7 +13,7 @@ RUN node --run build
 
 # Runner
 FROM ${NODE_IMAGE} AS runner
-RUN apk upgrade -U && npm r -g npm
+RUN apk upgrade --no-cache && npm r -g npm
 WORKDIR /app
 
 COPY --chown=node:node --from=builder /app/dist ./dist
@@ -29,7 +29,8 @@ LABEL org.opencontainers.image.description="HTTP relay server that queues LLM pr
 USER node
 VOLUME ["/app/data"]
 EXPOSE 3000
+# Shell form, so ${PORT} resolves at runtime — EXPOSE above is only the documented default.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO /dev/null http://localhost:3000/health || exit 1
+  CMD wget -qO /dev/null "http://localhost:${PORT:-3000}/health" || exit 1
 
 CMD ["node", "--no-warnings=ExperimentalWarning", "dist/index.js"]

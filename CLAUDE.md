@@ -9,7 +9,7 @@ npm run dev          # Dev server with auto-reload and pretty-printed logs
 npm run dev-raw      # Dev server with auto-reload, raw logs
 npm run build        # Production build via tsup → /dist (ESM)
 npm start            # Run production build (requires npm run build first)
-npm run typecheck    # TypeScript type checking only (no emit)
+npm run typecheck    # TypeScript type checking (src + test, no emit) via tsconfig.test.json
 npm run lint:check   # ESLint check
 npm run lint:fix     # ESLint auto-fix
 npm run format:check # Prettier check
@@ -35,9 +35,11 @@ Tests use **Vitest**: `npm test` (single run), `npm run test:watch`, `npm run te
 - `test/unit/` — unit tests with mocked dependencies (e.g. `service.test.ts` mocks `@lib` and `repo`)
 - `test/api/` — route-handler tests; each file mounts a single Hono handler and mocks the service/repository layer (no DB, no OpenAI)
 - `test/helpers/testDatabase.ts` — in-memory SQLite setup for integration-style tests; runs the real Drizzle migrations from `./drizzle`, so schema changes propagate automatically and cannot drift
-- `test/helpers/mocks.ts` — `makeLoggerMock`, `makeStatusCounts`, `postJson`, `withQuery`; `test/helpers/environment.ts` — `withEnvironment(vars, fn)` for env-dependent config tests
+- `test/helpers/mocks.ts` — `makeLoggerMock`, `makeStatusCounts`, `postJson`, `withQuery`, `readJson`; `test/helpers/environment.ts` — `withEnvironment(vars, fn)` for env-dependent config tests
 
 Run a single test file: `npx vitest run test/unit/service.test.ts`
+
+Test files are typechecked. `tsconfig.json` covers `src` only (that is what tsup and the editor use); `tsconfig.test.json` extends it to `src + test` and is what `npm run typecheck` runs. It adds `vitest/globals` types and the `ES2025.Iterator` / `ESNext.Array` libs, so tests may use `Array.fromAsync` and iterator helpers that `src` — pinned to the ES2024 baseline — may not. Use `readJson(response)` rather than `await response.json()`, which is typed `unknown`.
 
 Coverage thresholds (enforced): 60% lines / functions / branches / statements.
 
@@ -101,6 +103,8 @@ SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `n
 
 PRs target `main`. One logical change per PR. Run `npm run all` before opening a PR.
 
+CI (`.github/workflows/ci-dev.yaml`) runs format, lint, typecheck, build, and `test:coverage` on every push to a non-`main` branch and on every PR into `main`. The publish workflow reuses it via `workflow_call`, so nothing ships to ghcr.io without passing the same gate.
+
 ## Security concerns
 
 When touching these areas, keep these attack surfaces in mind:
@@ -115,7 +119,8 @@ When touching these areas, keep these attack surfaces in mind:
 - **Prettier**: single quotes, 120-char line width, no trailing commas.
 - **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins.
 - **Build**: tsup (configured via `tsup.config.ts`) targets Node 24, fully bundles all dependencies into a single ESM file at `dist/index.js` — no `node_modules` needed at runtime.
-- **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/`, `@prompt` → `src/prompt/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`). Use the alias when importing from a different folder; use relative imports (`./sibling`) within the same folder.
+- **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/`, `@prompt` → `src/prompt/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`). Use the alias when importing from a different folder; use relative imports (`./sibling`) within the same folder. Vitest cannot read them from tsconfig — its native `resolve.tsconfigPaths` is a boolean and honours the base config's `exclude: ["test"]` — so `vitest.config.ts` mirrors the map by hand. **Adding an alias means editing both files.**
+- **Dev server**: `tsx watch` (not nodemon — there is no nodemon config and tsx has watch built in).
 
 ## Deployment
 

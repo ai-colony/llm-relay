@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Nothing reaching `main` was ever checked**: `ci-dev.yaml` triggered only on `push` to non-`main` branches and had no `pull_request` trigger, so PRs into `main` and the resulting merge commits ran no CI at all — and `ci-publish-docker.yaml` built, pushed to ghcr.io, and cut a GitHub release without running lint, typecheck, or tests. PRs into `main` are now gated, and the publish workflow reuses the check job via `workflow_call` before it builds anything.
+- **Coverage thresholds were never enforced**: the 60% thresholds in `vitest.config.ts` (and the claim in the README/CONTRIBUTING) had no effect because CI ran `npm run test`, not `test:coverage`. CI now runs `test:coverage`.
+- **Test files were never typechecked**: `tsconfig.json` excludes `test/`, so all 22 test files were invisible to `tsc`. A new `tsconfig.test.json` covers `src + test` and `npm run typecheck` now uses it; the ~20 genuine type errors this surfaced are fixed.
+- **`format:fix` masked Prettier failures**: the script piped through `grep | sed`, so the pipeline's exit code came from `sed` and a Prettier crash reported success — including inside `npm run all`. Replaced with Prettier's native `--write --list-different`, which still prints the files it rewrote but propagates the real exit code.
+- **Docker `HEALTHCHECK` hardcoded port 3000** while `PORT` is configurable, leaving any container started on another port permanently unhealthy. It now resolves `${PORT:-3000}` at runtime.
+
+### Changed
+
+- Dev server runs on `tsx watch` instead of nodemon; `nodemon` dropped from devDependencies (there was no nodemon config — tsx has watch built in).
+- `drizzle.config.ts` declares `out: './drizzle'` explicitly instead of relying on the default, since the Dockerfile and the startup migration both depend on that exact path.
+- Dockerfile runner stage uses `apk upgrade --no-cache` so the apk index is not baked into the image layer.
+
+### Removed
+
+- `vite-tsconfig-paths` devDependency — it was installed but never imported. (Vite's native `resolve.tsconfigPaths` cannot replace the alias map here: it is a boolean and honours the base tsconfig's `exclude: ["test"]`, which would strip aliases from test files.)
+- Dead and duplicated config: stale `**/bin` and `**/demo` eslint ignores, four unicorn rule overrides repeated verbatim in both the `src` and `test` blocks, and inert `tsconfig.json` emit options (`declaration`, `outDir`, `sourceMap`, and friends) on a tsup-built, `--noEmit` project.
+- Vestigial `main` field in `package.json` (a private app with no `files`/`exports`).
+
+### Security
+
+- `.gitignore` now ignores `.env*` with a `!.env.example` exception, matching the pattern the Prettier, Docker, and ESLint ignore lists already used. Previously only `.env` and `.env.docker` were listed by name, so a future `.env.production` would have been committed.
+
 ## [1.9.0] - 2026-07-25
 
 ### Fixed

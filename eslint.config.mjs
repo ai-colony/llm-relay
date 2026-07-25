@@ -11,9 +11,7 @@ export default [
       '**/.DS_Store',
       '**/node_modules',
       '**/coverage',
-      '**/bin',
       '**/dist',
-      '**/demo',
       '**/.env',
       '**/.env.*',
       '!**/.env.example',
@@ -36,7 +34,7 @@ export default [
         ...globals.node
       },
 
-      ecmaVersion: 2023,
+      ecmaVersion: 2024,
       sourceType: 'module'
     },
 
@@ -51,6 +49,10 @@ export default [
       'unicorn/prefer-global-this': 'off',
       'unicorn/no-nested-ternary': 'off',
       'unicorn/prefer-module': 'off',
+      'unicorn/max-nested-calls': 'off',
+      'unicorn/prefer-temporal': 'off',
+      'unicorn/prefer-dispose': 'off',
+      'unicorn/no-top-level-side-effects': 'off',
       'no-alert': 'error',
       'no-debugger': 'error',
       '@typescript-eslint/consistent-type-imports': [
@@ -68,11 +70,7 @@ export default [
       '@typescript-eslint/no-shadow': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       'unicorn/no-null': 'off',
-      'unicorn/prevent-abbreviations': 'off',
-      'unicorn/max-nested-calls': 'off',
-      'unicorn/prefer-temporal': 'off',
-      'unicorn/prefer-dispose': 'off',
-      'unicorn/no-top-level-side-effects': 'off'
+      'unicorn/prevent-abbreviations': 'off'
     }
   },
   {
@@ -91,10 +89,6 @@ export default [
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-unnecessary-type-assertion': 'error',
       '@typescript-eslint/no-redundant-type-constituents': 'error',
-      'unicorn/max-nested-calls': 'off',
-      'unicorn/prefer-temporal': 'off',
-      'unicorn/prefer-dispose': 'off',
-      'unicorn/no-top-level-side-effects': 'off',
       'unicorn/no-top-level-assignment-in-function': 'off',
       'unicorn/prefer-await': 'off'
     }

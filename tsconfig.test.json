@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"],
+    // Tests run on Node 24 only, so they may use APIs beyond the ES2024 baseline src targets:
+    // Array.fromAsync (ESNext.Array) and iterator helpers such as .map/.toArray (ES2025.Iterator).
+    "lib": ["ES2024", "ES2025.Iterator", "ESNext.Array"]
+  },
+  "include": ["./src", "./test"],
+  "exclude": []
+}

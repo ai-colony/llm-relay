@@ -8,24 +8,21 @@ on:
       - main
 
 jobs:
-  build:
-    name: Build & Push
+  detect:
+    name: Detect Version Change
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      packages: write
+      contents: read
+    outputs:
+      version_changed: ${{ steps.detect_version.outputs.version_changed }}
+      current_version: ${{ steps.detect_version.outputs.current_version }}
+      repository: ${{ steps.detect_version.outputs.repository }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 2 # Fetch the last 2 commits to access HEAD~1
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.0'
-          cache: 'npm'
 
       - name: Detect version change
         id: detect_version
@@ -39,23 +36,46 @@ jobs:
 
           if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
             echo "Version upgraded from $PREVIOUS_VERSION to $CURRENT_VERSION."
-            echo "version_changed=true" >> $GITHUB_ENV
-            echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
-            echo "REPOSITORY=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "repository=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           else
             echo "No version upgrade detected."
+            echo "version_changed=false" >> $GITHUB_OUTPUT
           fi
 
+  # Reuses the same job contributors run locally, so nothing ships without passing it.
+  # A skipped `checks` propagates: `build` is skipped too when no version change is detected.
+  checks:
+    name: Checks
+    needs: detect
+    if: needs.detect.outputs.version_changed == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-dev.yaml
+
+  build:
+    name: Build & Push
+    needs: [detect, checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      CURRENT_VERSION: ${{ needs.detect.outputs.current_version }}
+      REPOSITORY: ${{ needs.detect.outputs.repository }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Set up QEMU
-        if: env.version_changed == 'true'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        if: env.version_changed == 'true'
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        if: env.version_changed == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -63,7 +83,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
-        if: env.version_changed == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -76,19 +95,16 @@ jobs:
             index:org.opencontainers.image.licenses=ISC
 
       - name: Configure git for tagging
-        if: env.version_changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Extract changelog notes
-        if: env.version_changed == 'true'
         run: |
           awk "/^## \[${{ env.CURRENT_VERSION }}\]/{flag=1; next} /^## \[/{if(flag) exit} flag" CHANGELOG.md \
             > /tmp/release_notes.md
 
       - name: Create git tag and GitHub release
-        if: env.version_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

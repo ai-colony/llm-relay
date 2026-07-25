@@ -6,7 +6,7 @@ vi.mock('../../src/prompt/repo', () => ({
 
 import { cancel } from '../../src/hono/prompt/cancel';
 import { CANCELLABLE_STATUSES, deletePromptByKey, findPromptStatusByKey } from '../../src/prompt/repo';
-import { withQuery } from '../helpers/mocks';
+import { readJson, withQuery } from '../helpers/mocks';
 
 const deleteRequest = (clientName: string, requestId: string) =>
   cancel.request(withQuery({ clientName, requestId }), { method: 'DELETE' });
@@ -20,7 +20,7 @@ describe('DELETE /prompt/cancel', () => {
     vi.mocked(findPromptStatusByKey).mockResolvedValue(undefined);
     const response = await deleteRequest('test', 'req-1');
     expect(response.status).toBe(404);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
   });
 
@@ -28,7 +28,7 @@ describe('DELETE /prompt/cancel', () => {
     vi.mocked(findPromptStatusByKey).mockResolvedValue({ status: 'in_progress' } as never);
     const response = await deleteRequest('test', 'req-1');
     expect(response.status).toBe(409);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
   });
 
@@ -48,7 +48,7 @@ describe('DELETE /prompt/cancel', () => {
 
     const response = await deleteRequest('test', 'req-1');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(true);
     expect(deletePromptByKey).toHaveBeenCalledWith('test', 'req-1', CANCELLABLE_STATUSES);
   });
@@ -63,7 +63,7 @@ describe('DELETE /prompt/cancel', () => {
 
     const response = await deleteRequest('test', 'req-2');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(true);
   });
 

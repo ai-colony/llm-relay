@@ -566,7 +566,7 @@ Tests use [Vitest](https://vitest.dev/) and are split into two categories:
 | `test/unit/` | Business logic (`config`, `openAI`, `repo`, `service`) | Mocked via `vi.mock`                               |
 | `test/api/`  | Hono route handlers (one file per endpoint)            | Service/repository layer mocked; no real DB or LLM |
 
-60% coverage is enforced on lines, functions, branches, and statements.
+60% coverage is enforced on lines, functions, branches, and statements; CI runs `test:coverage`, so dropping below the threshold fails the build. Test files are typechecked alongside `src` via `tsconfig.test.json`.
 
 ```bash
 npm test                # single run

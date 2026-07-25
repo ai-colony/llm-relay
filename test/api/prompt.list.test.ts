@@ -4,6 +4,7 @@ vi.mock('../../src/prompt/repo', () => ({
 
 import { list } from '../../src/hono/prompt/list';
 import { findPromptsByClientName } from '../../src/prompt/repo';
+import { readJson } from '../helpers/mocks';
 
 const makeRow = (requestId: string, promptStatus: string) => ({
   priority: 0,
@@ -26,7 +27,7 @@ describe('GET /prompt/list', () => {
 
     const response = await list.request('/?clientName=test-client');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body).toHaveLength(2);
     expect(vi.mocked(findPromptsByClientName)).toHaveBeenCalledWith('test-client', undefined);
   });
@@ -36,7 +37,7 @@ describe('GET /prompt/list', () => {
 
     const response = await list.request('/?clientName=test-client&status=queued');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body).toHaveLength(1);
     expect(vi.mocked(findPromptsByClientName)).toHaveBeenCalledWith('test-client', 'queued');
   });
@@ -56,7 +57,7 @@ describe('GET /prompt/list', () => {
 
     const response = await list.request('/?clientName=nobody');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body).toHaveLength(0);
   });
 });
