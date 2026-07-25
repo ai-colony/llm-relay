@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-07-25
+
+### Fixed
+
+- **`POST /prompt/add` returned `500` instead of `409` for duplicates**: Drizzle wraps driver failures in a `DrizzleQueryError` and puts the `node:sqlite` error on `cause`, so the unique-constraint check — which inspected the caught error directly — never matched. Re-submitting an existing `(clientName, requestId)` now returns the documented `409`. Detection moved into `isUniqueConstraintError` in `src/db/errors.ts`, which walks the cause chain.
+- **Model-resolution stampede**: the cache timestamp was stamped only after the upstream `GET /models` call resolved, so while the first request was in flight every concurrent caller considered the cache stale and fired its own request. It is now stamped at promise creation, so racing callers share one lookup.
+- **Callback delivery no longer blocks the worker**: pending callbacks were POSTed strictly one at a time, so a tick of 50 callbacks at the 10 s timeout could stall the whole worker loop for minutes. Deliveries now run concurrently, capped at 10 in flight.
+- **Startup race**: the HTTP port opened before `resetInProgressPrompts()` ran, so `GET /prompt/get` could briefly report a stale `in_progress` for a prompt left over from an unclean shutdown. The reset now completes before the server accepts traffic.
+- **Queued prompts and callbacks no longer serialize**: the two worker passes are independent and now run concurrently.
+- **Histogram bucket mismatch**: observing the same metric name with a different bucket array produced bucket counts that did not line up with the rendered boundaries. The first observation now fixes the boundaries for that metric.
+- **`DELETE /prompt/purge`**: `?clientName=` (empty string) was accepted and scoped the purge to a client named `""`; it is now rejected with a `400`.
+
+### Changed
+
+- **BREAKING — `GET /status`**: the `pending` field is renamed to `inProgress`. It counts `in_progress` prompts and collided confusingly with the unrelated `callbackPending` in the same object.
+- **BREAKING — `GET /metrics`**: `llm_relay_prompts_pending` is renamed to `llm_relay_prompts_in_progress`. `llm_relay_prompts_completed_total` and `llm_relay_prompts_failed_total` are renamed to `llm_relay_prompts_completed` / `llm_relay_prompts_failed` and retyped from `counter` to `gauge` — they are point-in-time database counts that decrease on `DELETE /prompt/purge`, so the `_total` suffix and counter type were misleading for `rate()` queries.
+- **`callbackUrl` reachability probe is stricter**: the `HEAD` probe on `POST /prompt/add` previously treated _any_ response as success, so an endpoint answering `404` or `500` was accepted. It now passes only on a 2xx, or on `405`/`501` (host reachable but `HEAD` not implemented). Callback URLs whose host returns an error status to `HEAD` will now be rejected with `503`.
+- The probe also runs _after_ the duplicate/overwrite checks, so a request destined for a `409` no longer pays the probe timeout.
+- **OpenAPI document is now generated** from the Zod schemas the routes validate with (`z.toJSONSchema`), so request schemas cannot drift from what is enforced. Newly documented: `securitySchemes` plus `security` on the auth-guarded routes, the `400` responses from request validation, `401`, `500`, the `503` from `POST /prompt/add`, and the `/openapi.json` and `/docs` routes themselves.
+- Single sources of truth: the prompt-status enum is defined once in `src/db/schema.ts`; error responses go through one `jsonError` helper; the prompt-queue gauges and the request counters/histograms now share one Prometheus registry instead of two exposition-format implementations.
+- Repository finders return a single row instead of a one-element array and project only the columns their callers use, removing full-row `SELECT *` reads from the worker, callback, and status-check paths.
+- Test database helper runs the real Drizzle migrations instead of hand-written DDL, which had already drifted from production (`idx_prompts_callback` column order).
+- Dependency updates (`hono`, `openai`, `eslint`).
+
 ## [1.8.1] - 2026-07-22
 
 ### Fixed
@@ -151,7 +175,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
-[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/ai-colony/llm-relay/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/ai-colony/llm-relay/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/ai-colony/llm-relay/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/ai-colony/llm-relay/compare/v1.6.0...v1.7.0

@@ -33,7 +33,7 @@ cp .env.example .env   # then edit .env
 | -------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PORT`                           | `3000`                     | HTTP port the relay listens on                                                                                                                                                                        |
 | `API_KEY`                        | _(empty)_                  | When set, all `/prompt/*` and `/chat/*` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, and `GET /metrics` remain public.                                              |
-| `LOG_LEVEL`                      | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`)                                                                                                                                            |
+| `LOG_LEVEL`                      | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`)                                                                                                                                   |
 | `DATABASE_FILENAME`              | `./database.sqlite`        | Path to the SQLite database file                                                                                                                                                                      |
 | `OPENAI_URL`                     | `http://localhost:8080/v1` | Base URL of the OpenAI-compatible API                                                                                                                                                                 |
 | `OPENAI_MODEL`                   | _(first available model)_  | Model name to use; if empty, the first model from `/models` is used                                                                                                                                   |
@@ -183,7 +183,7 @@ Returns queue counts and server uptime.
   "model": "llama-3.2",
   "contextSize": 131072,
   "queued": 3,
-  "pending": 1,
+  "inProgress": 1,
   "completed": 150,
   "failed": 2,
   "callbackPending": 0
@@ -199,7 +199,7 @@ const StatusResponse = z.object({
   model: z.string().nullable(),
   contextSize: z.number().int().nullable(),
   queued: z.number().int(),
-  pending: z.number().int(),
+  inProgress: z.number().int(),
   completed: z.number().int(),
   failed: z.number().int(),
   callbackPending: z.number().int()
@@ -214,9 +214,9 @@ Returns Prometheus text-exposition format (`Content-Type: text/plain; version=0.
 | Metric                                 | Type      | Labels                         | Description                                                                                                                                              |
 | -------------------------------------- | --------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `llm_relay_prompts_queued`             | gauge     | —                              | Prompts currently queued (including `failed_retry`)                                                                                                      |
-| `llm_relay_prompts_pending`            | gauge     | —                              | Prompts currently being processed                                                                                                                        |
-| `llm_relay_prompts_completed_total`    | counter   | —                              | Prompts successfully completed                                                                                                                           |
-| `llm_relay_prompts_failed_total`       | counter   | —                              | Prompts that failed permanently                                                                                                                          |
+| `llm_relay_prompts_in_progress`        | gauge     | —                              | Prompts currently being processed                                                                                                                        |
+| `llm_relay_prompts_completed`          | gauge     | —                              | Prompts successfully completed (point-in-time DB count, decreases on purge)                                                                              |
+| `llm_relay_prompts_failed`             | gauge     | —                              | Prompts that failed permanently (point-in-time DB count, decreases on purge)                                                                             |
 | `llm_relay_callbacks_pending`          | gauge     | —                              | Completed prompts awaiting callback delivery                                                                                                             |
 | `llm_relay_uptime_seconds`             | gauge     | —                              | Process uptime                                                                                                                                           |
 | `http_requests_total`                  | counter   | `method`, `path`, `status`     | HTTP requests to business endpoints (`/prompt/*`, `/chat/*`, etc. — excludes `/health`, `/status`, `/metrics`, `/openapi.json`, `/docs`, `/favicon.ico`) |
@@ -295,7 +295,7 @@ Poll for the result of a specific prompt.
 import { z } from 'zod';
 
 const GetPromptQuery = z.object({
-  clientName: z.string(),
+  clientName: z.string().min(1),
   requestId: z.string().min(1)
 });
 type GetPromptQuery = z.infer<typeof GetPromptQuery>;
@@ -360,34 +360,20 @@ import { z } from 'zod';
 const PromptStatus = z.enum(['queued', 'in_progress', 'completed', 'failed', 'failed_retry']);
 
 const ListPromptsQuery = z.object({
-  clientName: z.string(),
+  clientName: z.string().min(1),
   status: PromptStatus.optional()
 });
 type ListPromptsQuery = z.infer<typeof ListPromptsQuery>;
 
+// Each row is a summary projection, not the full record — use GET /prompt/get for prompt bodies,
+// results, and timings.
 const ListPromptsResponse = z.array(
   z.object({
     priority: z.number().int().min(0),
-    id: z.number().int(),
-    clientName: z.string(),
     requestId: z.string(),
     status: PromptStatus,
-    statusError: z.string().nullable(),
     createdAt: z.coerce.date(),
-    completedAt: z.coerce.date().nullable(),
-    callbackUrl: z.string().url().nullable(),
-    callbackCompleted: z.boolean(),
-    systemPrompt: z.string().nullable(),
-    userPrompt: z.string(),
-    temperature: z.number(),
-    retryCount: z.number().int(),
-    nextRetryAt: z.coerce.date().nullable(),
-    reasoning: z.string().nullable(),
-    response: z.string().nullable(),
-    reasoningTimeMs: z.number().nullable(),
-    reasoningTokenPerSecond: z.number().nullable(),
-    responseTimeMs: z.number().nullable(),
-    responseTokenPerSecond: z.number().nullable()
+    completedAt: z.coerce.date().nullable()
   })
 );
 type ListPromptsResponse = z.infer<typeof ListPromptsResponse>;
@@ -402,7 +388,7 @@ import { z } from 'zod';
 
 const PurgePromptsQuery = z.object({
   days: z.coerce.number().int().min(1).optional().default(7),
-  clientName: z.string().optional()
+  clientName: z.string().min(1).optional()
 });
 type PurgePromptsQuery = z.infer<typeof PurgePromptsQuery>;
 
@@ -427,7 +413,7 @@ Cancel and **delete** a prompt. Only succeeds for `queued`, `failed`, and `faile
 import { z } from 'zod';
 
 const CancelPromptQuery = z.object({
-  clientName: z.string(),
+  clientName: z.string().min(1),
   requestId: z.string().min(1)
 });
 type CancelPromptQuery = z.infer<typeof CancelPromptQuery>;
@@ -538,9 +524,9 @@ const CallbackPayload = z.object({
 type CallbackPayload = z.infer<typeof CallbackPayload>;
 ```
 
-Callback delivery is tracked separately from prompt completion — a failed HTTP POST is logged and retried on the next worker tick (up to 50 callbacks per tick, FIFO order). Callbacks pending longer than `CALLBACK_RETRY_TTL_HOURS` (default `24`) are abandoned.
+Callback delivery is tracked separately from prompt completion — a failed HTTP POST is logged and retried on the next worker tick (up to 50 callbacks per tick, FIFO order, delivered concurrently at most 10 at a time). Callbacks pending longer than `CALLBACK_RETRY_TTL_HOURS` (default `24`) are abandoned.
 
-**Availability check**: when `callbackUrl` is provided on `POST /prompt/add`, the relay sends a `HEAD` probe to that URL before accepting the request. If the probe times out or fails, the endpoint returns `503`.
+**Availability check**: when `callbackUrl` is provided on `POST /prompt/add`, the relay sends a `HEAD` probe to that URL before accepting the request. The probe passes on a 2xx, and on `405`/`501` (the host is reachable but does not implement `HEAD`). Any other status, a timeout, or a network error returns `503`. The probe runs _after_ the duplicate/overwrite checks, so a request destined for a `409` does not pay the probe timeout.
 
 **HMAC signing**: when `CALLBACK_HMAC_SECRET` is set, each callback POST includes an `X-LLM-Relay-Signature: hmac-sha256=<hex>` header. Receivers can verify it by computing `HMAC-SHA256(secret, body)` and comparing the hex digest.
 

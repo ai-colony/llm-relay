@@ -49,10 +49,11 @@ Tests live in two directories:
 
 - `test/unit/` — unit tests; dependencies (`@lib`, repository) are mocked
 - `test/api/` — route-handler tests; each file mounts a single Hono handler with the service/repository layer mocked (no real DB or LLM calls)
+- `test/helpers/` — shared fixtures: `testDatabase.ts` (in-memory SQLite), `mocks.ts` (`makeLoggerMock`, `makeStatusCounts`, `postJson`, `withQuery`), `environment.ts` (`withEnvironment` for env-dependent config tests)
 
 60% coverage is enforced on lines, functions, branches, and statements.
 
-> **Note:** If you change `src/db/schema.ts`, you must also update `test/helpers/testDatabase.ts` manually — it mirrors the schema using raw SQL and is not driven by Drizzle migrations.
+> **Note:** `test/helpers/testDatabase.ts` builds its in-memory database by running the real migrations from `./drizzle`, so a schema change needs no manual mirroring here — but you must still generate the migration (`npm run drizzle:generate`) for it to be picked up.
 
 ## Submitting a PR
 

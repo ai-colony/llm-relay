@@ -43,12 +43,12 @@ Hono-based REST API with Zod request validation. Routes are split by concern: pr
 
 ### Worker Loop (`src/index.ts` + `src/prompt/service.ts`)
 
-A `setImmediate` loop with a 100 ms pause between iterations. Each tick:
+Kicked off with `setImmediate`, then re-scheduled with a 100 ms `setTimeout` after each iteration. Each tick:
 
 1. Picks up to `WORKER_CONCURRENCY` (default `1`) highest-priority queued prompts (lowest `priority` value, FIFO on ties) and marks them all `in_progress`.
 2. Streams each picked prompt to the upstream LLM API concurrently via the OpenAI SDK.
 3. Stores each result and updates the prompt status (`completed`, `failed`, or `failed_retry`).
-4. On the next pass, delivers pending callbacks (up to 50 per tick).
+4. In the same pass, delivers pending callbacks (up to 50 per tick, at most 10 in flight at a time). Queued-prompt processing and callback delivery run concurrently — neither blocks the other.
 
 Failed prompts are retried with exponential backoff (`2^retryCount` seconds, capped at 60 s) until `OPENAI_MAX_RETRY_COUNT` is reached.
 
@@ -67,6 +67,6 @@ queued → in_progress → completed
 ### Shared Library (`src/lib/`)
 
 - **`config.ts`** — environment variable parsing via `env-var`
-- **`logger.ts`** — Pino structured JSON logger; every log includes a `component` field (`server`, `http`, `worker`, `callback`, `openai`)
+- **`logger.ts`** — Pino structured JSON logger; every log includes a `component` field (`server`, `http`, `worker`, `callback`, `openai`, `chat`)
 - **`openAI.ts`** — OpenAI SDK streaming wrapper; resolves the model name on first use and re-resolves it every `OPENAI_MODEL_CACHE_TTL_SECONDS` (default 60 s) so a backend restart with a different model is picked up without restarting the relay. Exports `executeOpenAIPrompt` (used by the worker — accumulates the full response, tracks reasoning vs response tokens separately, emits timing metrics on completion) and `streamChatCompletion` (used by `POST /chat/completions` — yields raw SSE chunks directly to the caller)
-- **`metrics.ts`** — dependency-free in-process Prometheus registry (`incCounter`, `observeHistogram`, `renderMetrics`) used to back `GET /metrics`. The `httpMetrics` middleware (`src/hono/httpMetrics.ts` — skips monitoring routes like `/health`, `/status`, `/metrics` themselves), the worker's OpenAI call, the `/chat/completions` stream, and callback delivery each record into it, producing `http_requests_total`/`http_request_duration_seconds`, `openai_requests_total`/`openai_request_duration_seconds`, `openai_chat_requests_total`/`openai_chat_request_duration_seconds`, and `callback_deliveries_total`
+- **`metrics.ts`** — dependency-free in-process Prometheus registry (`incCounter`, `setGauge`, `observeHistogram`, `renderMetrics`) used to back `GET /metrics`. The `httpMetrics` middleware (`src/hono/httpMetrics.ts` — skips monitoring routes like `/health`, `/status`, `/metrics` themselves), the worker's OpenAI call, the `/chat/completions` stream, and callback delivery each record into it, producing `http_requests_total`/`http_request_duration_seconds`, `openai_requests_total`/`openai_request_duration_seconds`, `openai_chat_requests_total`/`openai_chat_request_duration_seconds`, and `callback_deliveries_total`. The `llm_relay_*` prompt-queue gauges go through the same registry via `setGauge`, so `GET /metrics` has a single exposition-format implementation
