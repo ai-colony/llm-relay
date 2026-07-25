@@ -1,44 +1,22 @@
-import { renderMetrics } from '@lib';
+import { renderMetrics, setGauge } from '@lib';
 import { getPromptStatusCounts } from '@prompt/repo';
 import { Hono } from 'hono';
-
-const metric = (name: string, type: 'gauge' | 'counter', help: string, value: number) =>
-  `# HELP ${name} ${help}\n# TYPE ${name} ${type}\n${name} ${value}`;
 
 export const metrics = new Hono().get('/', async (c) => {
   const counts = await getPromptStatusCounts();
 
-  const body =
-    [
-      metric(
-        'llm_relay_prompts_queued',
-        'gauge',
-        'Number of prompts currently queued (including failed_retry)',
-        counts.queued
-      ),
-      metric('llm_relay_prompts_pending', 'gauge', 'Number of prompts currently being processed', counts.pending),
-      metric(
-        'llm_relay_prompts_completed_total',
-        'counter',
-        'Total number of prompts successfully completed',
-        counts.completed
-      ),
-      metric(
-        'llm_relay_prompts_failed_total',
-        'counter',
-        'Total number of prompts that failed permanently',
-        counts.failed
-      ),
-      metric(
-        'llm_relay_callbacks_pending',
-        'gauge',
-        'Number of completed prompts awaiting callback delivery',
-        counts.callbackPending
-      ),
-      metric('llm_relay_uptime_seconds', 'gauge', 'Process uptime in seconds', Math.floor(process.uptime()))
-    ].join('\n') +
-    '\n' +
-    renderMetrics();
+  // All point-in-time counts read back from the database — they can decrease (DELETE /prompt/purge
+  // removes completed rows), so they are gauges rather than counters.
+  setGauge('llm_relay_prompts_queued', 'Number of prompts currently queued (including failed_retry)', counts.queued);
+  setGauge('llm_relay_prompts_in_progress', 'Number of prompts currently being processed', counts.inProgress);
+  setGauge('llm_relay_prompts_completed', 'Number of prompts successfully completed', counts.completed);
+  setGauge('llm_relay_prompts_failed', 'Number of prompts that failed permanently', counts.failed);
+  setGauge(
+    'llm_relay_callbacks_pending',
+    'Number of completed prompts awaiting callback delivery',
+    counts.callbackPending
+  );
+  setGauge('llm_relay_uptime_seconds', 'Process uptime in seconds', Math.floor(process.uptime()));
 
-  return c.text(body, 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
+  return c.text(renderMetrics(), 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
 });

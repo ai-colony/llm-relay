@@ -1,59 +1,43 @@
-import type { SqliteError } from '@db';
-import { SQLITE_CONSTRAINT_UNIQUE } from '@db';
+import { isUniqueConstraintError } from '@db';
 import { zValidator } from '@hono/zod-validator';
-import { checkCallbackAvailability, isCallbackUrlAllowed } from '@lib';
-import { countQueuedPrompts, deletePromptForOverwrite, findPromptByClientNameAndRequestId } from '@prompt/repo';
-import { createPrompt } from '@prompt/service';
+import { checkCallbackAvailability } from '@lib';
+import {
+  addPrompt,
+  countQueuedPrompts,
+  deletePromptByKey,
+  findPromptStatusByKey,
+  OVERWRITABLE_STATUSES
+} from '@prompt/repo';
 import { Hono } from 'hono';
-import { z } from 'zod';
 
-const BodySchema = z.object({
-  clientName: z.string().min(1),
-  requestId: z.string().min(1),
-  callbackUrl: z
-    .string()
-    .url()
-    .refine(isCallbackUrlAllowed, { message: 'callbackUrl is not in the allowlist' })
-    .optional(),
-  systemPrompt: z.string().optional(),
-  userPrompt: z.string().min(1),
-  temperature: z.number().min(0).max(2),
-  priority: z.number().int().min(0).optional().default(0),
-  overwrite: z.boolean().optional().default(false)
-});
+import { jsonError } from '../errors';
+import { AddPromptBodySchema } from './schemas';
 
-const ResponseSchema = z.object({
-  success: z.boolean(),
-  queued: z.number()
-});
-type ResponseSchema = z.infer<typeof ResponseSchema>;
+type AddPromptResponse = { success: true; queued: number };
 
-export const add = new Hono().post('/', zValidator('json', BodySchema), async (c) => {
+export const add = new Hono().post('/', zValidator('json', AddPromptBodySchema), async (c) => {
   const data = c.req.valid('json');
 
-  if (data.callbackUrl && !(await checkCallbackAvailability(data.callbackUrl)))
-    return c.json({ success: false, error: 'callbackUrl is not available' }, 503);
-
   if (data.overwrite) {
-    const [existing] = await findPromptByClientNameAndRequestId(data.clientName, data.requestId);
+    const existing = await findPromptStatusByKey(data.clientName, data.requestId);
     if (existing) {
       if (existing.status === 'in_progress')
-        return c.json({ success: false, error: 'Cannot overwrite a prompt that is currently in progress' }, 409);
-      await deletePromptForOverwrite(data.clientName, data.requestId);
+        return jsonError(c, 409, 'Cannot overwrite a prompt that is currently in progress');
+      await deletePromptByKey(data.clientName, data.requestId, OVERWRITABLE_STATUSES);
     }
   }
 
+  // Probed after the overwrite check so a request destined for a 409 does not pay the HEAD timeout.
+  if (data.callbackUrl && !(await checkCallbackAvailability(data.callbackUrl)))
+    return jsonError(c, 503, 'callbackUrl is not available');
+
   try {
-    await createPrompt(data);
+    await addPrompt(data);
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error as SqliteError).code === 'ERR_SQLITE_ERROR' &&
-      (error as SqliteError).errcode === SQLITE_CONSTRAINT_UNIQUE
-    )
-      return c.json({ success: false, error: 'A prompt with this clientName and requestId already exists' }, 409);
+    if (isUniqueConstraintError(error))
+      return jsonError(c, 409, 'A prompt with this clientName and requestId already exists');
     throw error;
   }
   const queued = await countQueuedPrompts();
-  return c.json({ success: true, queued } satisfies ResponseSchema, 201);
+  return c.json({ success: true, queued } satisfies AddPromptResponse, 201);
 });

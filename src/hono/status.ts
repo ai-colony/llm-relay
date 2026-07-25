@@ -15,7 +15,7 @@ export const status = new Hono().get('/', async (c) => {
     model: modelInfo.model,
     contextSize: modelInfo.contextSize,
     queued: counts.queued,
-    pending: counts.pending,
+    inProgress: counts.inProgress,
     completed: counts.completed,
     failed: counts.failed,
     callbackPending: counts.callbackPending

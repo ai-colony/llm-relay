@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 
 import { createAuthMiddleware } from './auth';
 import { chat } from './chat';
+import { jsonError } from './errors';
 import { health } from './health';
 import { httpMetrics } from './httpMetrics';
 import { metrics } from './metrics';
@@ -16,7 +17,7 @@ const auth = createAuthMiddleware(config.http.apiKey);
 export const app = new Hono()
   .onError((error, c) => {
     logger.error({ component: 'http', error }, 'Unhandled route error');
-    return c.json({ success: false, error: 'Internal server error', path: c.req.path, method: c.req.method }, 500);
+    return jsonError(c, 500, 'Internal server error', { path: c.req.path, method: c.req.method });
   })
   .use(httpMetrics)
   .use(

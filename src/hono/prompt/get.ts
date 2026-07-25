@@ -1,30 +1,28 @@
 import { zValidator } from '@hono/zod-validator';
 import { findPromptByClientNameAndRequestId } from '@prompt/repo';
 import { Hono } from 'hono';
-import { z } from 'zod';
 
-import { QuerySchema } from './schemas';
+import { jsonError } from '../errors';
+import { PromptKeyQuerySchema } from './schemas';
 
-const ResponseSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.enum(['queued', 'in_progress', 'failed_retry']) }),
-  z.object({ status: z.literal('failed'), statusError: z.string().nullable() }),
-  z.object({
-    status: z.literal('completed'),
-    reasoning: z.string().nullable(),
-    response: z.string().nullable(),
-    reasoningTimeMs: z.number().nullable(),
-    reasoningTokenPerSecond: z.number().nullable(),
-    responseTimeMs: z.number().nullable(),
-    responseTokenPerSecond: z.number().nullable()
-  })
-]);
-type ResponseSchema = z.infer<typeof ResponseSchema>;
+type GetPromptResponse =
+  | { status: 'queued' | 'in_progress' | 'failed_retry' }
+  | { status: 'failed'; statusError: string | null }
+  | {
+      status: 'completed';
+      reasoning: string | null;
+      response: string | null;
+      reasoningTimeMs: number | null;
+      reasoningTokenPerSecond: number | null;
+      responseTimeMs: number | null;
+      responseTokenPerSecond: number | null;
+    };
 
-export const get = new Hono().get('/', zValidator('query', QuerySchema), async (c) => {
+export const get = new Hono().get('/', zValidator('query', PromptKeyQuerySchema), async (c) => {
   const { clientName, requestId } = c.req.valid('query');
-  const [prompt] = await findPromptByClientNameAndRequestId(clientName, requestId);
+  const prompt = await findPromptByClientNameAndRequestId(clientName, requestId);
 
-  if (!prompt) return c.json({ success: false, error: 'Prompt not found' }, 404);
+  if (!prompt) return jsonError(c, 404, 'Prompt not found');
 
   if (prompt.status === 'completed')
     return c.json(
@@ -36,12 +34,12 @@ export const get = new Hono().get('/', zValidator('query', QuerySchema), async (
         reasoningTokenPerSecond: prompt.reasoningTokenPerSecond,
         responseTimeMs: prompt.responseTimeMs,
         responseTokenPerSecond: prompt.responseTokenPerSecond
-      } satisfies ResponseSchema,
+      } satisfies GetPromptResponse,
       200
     );
 
   if (prompt.status === 'failed')
-    return c.json({ status: prompt.status, statusError: prompt.statusError } satisfies ResponseSchema, 200);
+    return c.json({ status: prompt.status, statusError: prompt.statusError } satisfies GetPromptResponse, 200);
 
-  return c.json({ status: prompt.status } satisfies ResponseSchema, 200);
+  return c.json({ status: prompt.status } satisfies GetPromptResponse, 200);
 });
