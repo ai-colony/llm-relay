@@ -39,6 +39,8 @@ Hono-based REST API with Zod request validation. Routes are split by concern: pr
 
 `POST /chat/completions` is a direct streaming path that bypasses the queue entirely: it calls `streamChatCompletion` in `openAI.ts`, pipes the SSE chunks straight to the client, and propagates the client's abort signal to cancel the upstream request on disconnect.
 
+Request schemas live in `src/hono/prompt/schemas.ts` (and `src/lib/chatSchemas.ts` for chat) rather than in the route files, so `src/hono/openapi.ts` can generate `GET /openapi.json` from the same Zod objects the routes validate with (`z.toJSONSchema`) — the spec cannot drift from what is enforced. Error responses go through the single `jsonError` helper in `src/hono/errors.ts`.
+
 `GET /metrics` returns Prometheus text-format output combining prompt-queue gauges with request-level counters/histograms — see [Shared Library](#shared-library-srclib) below.
 
 ### Worker Loop (`src/index.ts` + `src/prompt/service.ts`)
@@ -54,7 +56,9 @@ Failed prompts are retried with exponential backoff (`2^retryCount` seconds, cap
 
 ### Data Layer (`src/db/`)
 
-SQLite via Drizzle ORM using Node.js's built-in `node:sqlite` module. The `prompts` table enforces a unique index on `(clientName, requestId)`. Schema changes require `npm run drizzle:push` (dev) or `drizzle:generate` + `drizzle:migrate` (prod).
+SQLite via Drizzle ORM using Node.js's built-in `node:sqlite` module. The `prompts` table enforces a unique index on `(clientName, requestId)`. Schema changes require `npm run drizzle:push` (dev) or `drizzle:generate` + `drizzle:migrate` (prod); on startup `src/index.ts` applies the generated migrations from `./drizzle` before the port opens, so that folder must ship alongside `dist/`.
+
+`schema.ts` is the single source of truth for the prompt-status enum (`PROMPT_STATUSES`) — the Drizzle column, the Zod request schemas, and the OpenAPI enum all derive from it. `errors.ts` provides `isUniqueConstraintError`, which walks the `cause` chain of a `DrizzleQueryError` down to the underlying `node:sqlite` error so `POST /prompt/add` can turn a duplicate key into a `409`.
 
 Prompt lifecycle states:
 
@@ -66,7 +70,11 @@ queued → in_progress → completed
 
 ### Shared Library (`src/lib/`)
 
-- **`config.ts`** — environment variable parsing via `env-var`
+All modules are re-exported through the `src/lib/index.ts` barrel; other layers import from `@lib` rather than reaching past it.
+
+- **`config.ts`** — environment variable parsing via `env-var`, validated at startup (out-of-range values throw rather than silently clamping)
 - **`logger.ts`** — Pino structured JSON logger; every log includes a `component` field (`server`, `http`, `worker`, `callback`, `openai`, `chat`)
+- **`callbackUrl.ts`** — `isCallbackUrlAllowed` (regex check against `CALLBACK_URL_ALLOWLIST`, the SSRF guard used inside the `POST /prompt/add` Zod schema) and `checkCallbackAvailability` (5 s `HEAD` probe; passes on 2xx, or `405`/`501` where the host is reachable but does not implement `HEAD`)
+- **`chatSchemas.ts`** — Zod schemas for `POST /chat/completions` request bodies. They live here rather than in `src/hono/` so `@lib` never depends on the HTTP layer; `src/hono/chat/schemas.ts` re-exports them
 - **`openAI.ts`** — OpenAI SDK streaming wrapper; resolves the model name on first use and re-resolves it every `OPENAI_MODEL_CACHE_TTL_SECONDS` (default 60 s) so a backend restart with a different model is picked up without restarting the relay. Exports `executeOpenAIPrompt` (used by the worker — accumulates the full response, tracks reasoning vs response tokens separately, emits timing metrics on completion) and `streamChatCompletion` (used by `POST /chat/completions` — yields raw SSE chunks directly to the caller)
 - **`metrics.ts`** — dependency-free in-process Prometheus registry (`incCounter`, `setGauge`, `observeHistogram`, `renderMetrics`) used to back `GET /metrics`. The `httpMetrics` middleware (`src/hono/httpMetrics.ts` — skips monitoring routes like `/health`, `/status`, `/metrics` themselves), the worker's OpenAI call, the `/chat/completions` stream, and callback delivery each record into it, producing `http_requests_total`/`http_request_duration_seconds`, `openai_requests_total`/`openai_request_duration_seconds`, `openai_chat_requests_total`/`openai_chat_request_duration_seconds`, and `callback_deliveries_total`. The `llm_relay_*` prompt-queue gauges go through the same registry via `setGauge`, so `GET /metrics` has a single exposition-format implementation

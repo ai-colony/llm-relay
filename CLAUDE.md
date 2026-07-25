@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run dev          # Dev server with auto-reload and pretty-printed logs
 npm run dev-raw      # Dev server with auto-reload, raw logs
+npm run run          # Single run via tsx, no watch
 npm run build        # Production build via tsup → /dist (ESM)
 npm start            # Run production build (requires npm run build first)
 npm run typecheck    # TypeScript type checking (src + test, no emit) via tsconfig.test.json
@@ -119,7 +120,7 @@ When touching these areas, keep these attack surfaces in mind:
 ## Tooling notes
 
 - **Prettier**: single quotes, 120-char line width, no trailing commas.
-- **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins.
+- **ESLint**: flat config (`eslint.config.mjs`) with TypeScript, Unicorn, and Simple Import Sort plugins. `src` gets an extra type-aware block (`projectService: true`) with `no-floating-promises`, `await-thenable`, `no-unnecessary-condition`, and `switch-exhaustiveness-check`; `test` relaxes `no-shadow`, `no-explicit-any`, `unicorn/no-null`, and `prevent-abbreviations`. `await-thenable` means an `await` on a synchronous call is an error — `migrate()` and `checkDatabase()` are both sync.
 - **Build**: tsup (configured via `tsup.config.ts`) targets Node 24, fully bundles all dependencies into a single ESM file at `dist/index.js` — no `node_modules` needed at runtime.
 - **Path aliases**: `@lib` → `src/lib/`, `@db` → `src/db/`, `@prompt` → `src/prompt/` (defined in `tsconfig.json` and resolved by `tsx`/`tsup`). Use the alias when importing from a different folder; use relative imports (`./sibling`) within the same folder. Vitest cannot read them from tsconfig — its native `resolve.tsconfigPaths` is a boolean and honours the base config's `exclude: ["test"]` — so `vitest.config.ts` mirrors the map by hand. **Adding an alias means editing both files.**
 - **Dev server**: `tsx watch` (not nodemon — there is no nodemon config and tsx has watch built in).

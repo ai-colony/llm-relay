@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Dev server runs on `tsx watch` instead of nodemon; `nodemon` dropped from devDependencies (there was no nodemon config — tsx has watch built in).
+- ESLint now enforces `@typescript-eslint/await-thenable` on `src`, which surfaced two `await`s on non-promises: the startup `migrate()` call and `checkDatabase()` in `GET /health` are both synchronous, so awaiting them only added a microtask hop. `GET /health` no longer wraps the two checks in a `Promise.all` that could never overlap.
 - `drizzle.config.ts` declares `out: './drizzle'` explicitly instead of relying on the default, since the Dockerfile and the startup migration both depend on that exact path.
 - Dockerfile runner stage uses `apk upgrade --no-cache` so the apk index is not baked into the image layer.
 

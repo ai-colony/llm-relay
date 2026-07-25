@@ -1,5 +1,9 @@
 # Security Policy
 
+## Supported Versions
+
+Only the latest released version receives security fixes. There are no long-term support branches — published images are immutable per version tag (`ghcr.io/ai-colony/llm-relay:<version>`, no `latest`), so upgrading means pinning to a newer tag.
+
 ## Reporting a Vulnerability
 
 Please **do not** open a public issue for security vulnerabilities.

@@ -1,6 +1,6 @@
 # LLM-relay
 
-An HTTP relay server that queues LLM prompts, executes them serially against any OpenAI-compatible API, and optionally delivers results to a callback URL.
+An HTTP relay server that queues LLM prompts, executes them against any OpenAI-compatible API (serially by default, or `WORKER_CONCURRENCY` at a time), and optionally delivers results to a callback URL.
 
 [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
 
@@ -32,7 +32,7 @@ cp .env.example .env   # then edit .env
 | Variable                         | Default                    | Description                                                                                                                                                                                           |
 | -------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PORT`                           | `3000`                     | HTTP port the relay listens on                                                                                                                                                                        |
-| `API_KEY`                        | _(empty)_                  | When set, all `/prompt/*` and `/chat/*` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, and `GET /metrics` remain public.                                              |
+| `API_KEY`                        | _(empty)_                  | When set, all `/prompt/*` and `/chat/*` endpoints require `Authorization: Bearer <key>`. `GET /health`, `GET /status`, `GET /metrics`, `GET /openapi.json`, and `GET /docs` remain public.            |
 | `LOG_LEVEL`                      | `info`                     | Pino log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`)                                                                                                                                   |
 | `DATABASE_FILENAME`              | `./database.sqlite`        | Path to the SQLite database file                                                                                                                                                                      |
 | `OPENAI_URL`                     | `http://localhost:8080/v1` | Base URL of the OpenAI-compatible API                                                                                                                                                                 |
@@ -95,14 +95,14 @@ Images are published to GitHub Container Registry. A new image is built and push
 
 | Tag                       | Example                                   | When to use                                                            |
 | ------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
-| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.8.1`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
+| `<version>`               | `ghcr.io/ai-colony/llm-relay:1.9.0`       | Standard — pin to a known release. There is no `latest` or `main` tag. |
 | `<image>@sha256:<digest>` | `ghcr.io/ai-colony/llm-relay@sha256:abc…` | Fully reproducible deployments — immune to tag mutation.               |
 
 To find the digest for a given version:
 
 ```bash
-docker pull ghcr.io/ai-colony/llm-relay:1.8.1
-docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.8.1
+docker pull ghcr.io/ai-colony/llm-relay:1.9.0
+docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/ai-colony/llm-relay:1.9.0
 # ghcr.io/ai-colony/llm-relay@sha256:<digest>
 ```
 
@@ -114,24 +114,30 @@ docker run -d --rm \
   -p 3000:3000 \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.8.1
+  ghcr.io/ai-colony/llm-relay:1.9.0
 ```
 
-Full — all available environment variables:
+Full — every environment variable, at its default value (`DATABASE_FILENAME` is preset to `/app/data/database.sqlite` in the image and is deliberately not overridden here):
 
 ```bash
 docker run -d --rm \
   --name llm-relay \
   -p 3000:3000 \
   -e PORT=3000 \
+  -e API_KEY= \
   -e LOG_LEVEL=info \
   -e OPENAI_URL=http://host.docker.internal:8080/v1 \
   -e OPENAI_MODEL= \
   -e OPENAI_KEY=none \
   -e OPENAI_TIMEOUT=10000 \
+  -e OPENAI_MAX_RETRY_COUNT=10 \
   -e OPENAI_MODEL_CACHE_TTL_SECONDS=60 \
+  -e WORKER_CONCURRENCY=1 \
+  -e CALLBACK_URL_ALLOWLIST= \
+  -e CALLBACK_RETRY_TTL_HOURS=24 \
+  -e CALLBACK_HMAC_SECRET= \
   -v llm-relay-data:/app/data \
-  ghcr.io/ai-colony/llm-relay:1.8.1
+  ghcr.io/ai-colony/llm-relay:1.9.0
 ```
 
 Key points:
@@ -154,7 +160,7 @@ These scripts read `OPENAI_*` and other variables from `.env.docker` (create it 
 ### From source
 
 ```bash
-git clone https://github.com/BCsabaEngine/llm-relay /opt/llm-relay
+git clone https://github.com/ai-colony/llm-relay /opt/llm-relay
 cd /opt/llm-relay
 npm install
 npm run build
@@ -172,13 +178,23 @@ All requests and responses use JSON. An interactive OpenAPI reference is availab
 
 Returns `200 OK` when both the SQLite database and the upstream OpenAI endpoint are reachable. Returns `503` if either check fails, with a `checks` object describing which component is down.
 
+```json
+{
+  "success": false,
+  "checks": {
+    "db": { "ok": true },
+    "openai": { "ok": false, "error": "fetch failed" }
+  }
+}
+```
+
 ### `GET /status`
 
 Returns queue counts and server uptime.
 
 ```json
 {
-  "version": "1.8.1",
+  "version": "1.9.0",
   "uptime": 42,
   "model": "llama-3.2",
   "contextSize": 131072,
@@ -267,6 +283,7 @@ const AddPromptBody = z.object({
   systemPrompt: z.string().optional(),
   temperature: z.number().min(0).max(2),
   priority: z.number().int().min(0).optional().default(0),
+  // Server-side this also carries a .refine() against CALLBACK_URL_ALLOWLIST.
   callbackUrl: z.string().url().optional(),
   overwrite: z.boolean().optional().default(false)
 });
@@ -387,7 +404,7 @@ Bulk-delete `completed` and `failed` prompts older than `days` days (default `7`
 import { z } from 'zod';
 
 const PurgePromptsQuery = z.object({
-  days: z.coerce.number().int().min(1).optional().default(7),
+  days: z.coerce.number().int().min(1).default(7),
   clientName: z.string().min(1).optional()
 });
 type PurgePromptsQuery = z.infer<typeof PurgePromptsQuery>;
@@ -492,7 +509,7 @@ If the client disconnects mid-stream, the abort signal is propagated and the ups
 ```
 queued → in_progress → completed
                      → failed          (terminal)
-                     → failed_retry    (re-queued, retried indefinitely)
+                     → failed_retry    (re-queued with backoff, up to OPENAI_MAX_RETRY_COUNT times)
 ```
 
 Transient errors (network timeouts, connection resets, `AbortError`, etc.) trigger `failed_retry` with an exponential backoff delay (`2^retryCount × 1 s`, capped at 60 s). After `OPENAI_MAX_RETRY_COUNT` attempts (default `10`) the prompt transitions to `failed` with `statusError: "max_retries_exceeded"`. Hard failures (e.g. model not found) go straight to `failed` immediately.
@@ -559,12 +576,15 @@ curl -s http://localhost:3000/status
 
 ## Testing
 
-Tests use [Vitest](https://vitest.dev/) and are split into two categories:
+Tests use [Vitest](https://vitest.dev/):
 
-| Directory    | What it tests                                          | External dependencies                              |
-| ------------ | ------------------------------------------------------ | -------------------------------------------------- |
-| `test/unit/` | Business logic (`config`, `openAI`, `repo`, `service`) | Mocked via `vi.mock`                               |
-| `test/api/`  | Hono route handlers (one file per endpoint)            | Service/repository layer mocked; no real DB or LLM |
+| Directory       | What it holds                                                            | External dependencies                              |
+| --------------- | ------------------------------------------------------------------------ | -------------------------------------------------- |
+| `test/unit/`    | Business logic (`config`, `openAI`, `repo`, `service`, `callbackUrl`, …) | Mocked via `vi.mock`                               |
+| `test/api/`     | Hono route handlers (one file per endpoint)                              | Service/repository layer mocked; no real DB or LLM |
+| `test/helpers/` | Shared fixtures — in-memory SQLite, logger mocks, request helpers        | —                                                  |
+
+`test/helpers/testDatabase.ts` builds its in-memory database by running the real migrations from `./drizzle`, so the test schema cannot drift from production.
 
 60% coverage is enforced on lines, functions, branches, and statements; CI runs `test:coverage`, so dropping below the threshold fails the build. Test files are typechecked alongside `src` via `tsconfig.test.json`.
 
