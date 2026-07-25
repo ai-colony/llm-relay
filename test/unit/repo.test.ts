@@ -1,21 +1,23 @@
 vi.mock('@db', async () => {
   const { testDatabaseClient, testDbSchema } = await import('../helpers/testDatabase');
   return {
-    database: { dbClient: testDatabaseClient, dbSchema: testDbSchema },
+    database: { client: testDatabaseClient, schema: testDbSchema },
     checkDatabase: () => ({ ok: true })
   };
 });
 
 import {
   addPrompt,
+  CANCELLABLE_STATUSES,
   countQueuedPrompts,
-  deletePromptByClientNameAndRequestId,
-  deletePromptForOverwrite,
+  deletePromptByKey,
   findCallbackPendingPrompts,
   findPromptByClientNameAndRequestId,
   findPromptsByClientName,
+  findPromptStatusByKey,
   findQueuedPrompts,
   getPromptStatusCounts,
+  OVERWRITABLE_STATUSES,
   purgeCompletedPrompts,
   resetInProgressPrompts,
   updatePromptSetCallbackCompleted,
@@ -57,7 +59,7 @@ describe('addPrompt', () => {
       systemPrompt: 'be helpful',
       callbackUrl: 'https://example.com/cb'
     });
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.systemPrompt).toBe('be helpful');
     expect(prompt?.callbackUrl).toBe('https://example.com/cb');
     expect(Number(id)).toBeGreaterThan(0);
@@ -66,7 +68,7 @@ describe('addPrompt', () => {
   it('accepts a UUID-style string requestId', async () => {
     const id = await addPrompt({ ...basePrompt, requestId: '550e8400-e29b-41d4-a716-446655440000' });
     expect(Number(id)).toBeGreaterThan(0);
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', '550e8400-e29b-41d4-a716-446655440000');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', '550e8400-e29b-41d4-a716-446655440000');
     expect(prompt?.requestId).toBe('550e8400-e29b-41d4-a716-446655440000');
   });
 });
@@ -103,7 +105,9 @@ describe('findQueuedPrompts', () => {
     const id = await addPrompt(basePrompt);
     await updatePromptSetFailed(Number(id), 'timeout', true);
     const result = await findQueuedPrompts(1);
-    expect(result[0]?.status).toBe('failed_retry');
+    expect(result).toHaveLength(1);
+    expect(result[0]?.requestId).toBe('req-1');
+    expect(await findPromptStatusByKey('test-client', 'req-1')).toEqual({ status: 'failed_retry' });
   });
 
   it('does not return a failed_retry prompt whose nextRetryAt is in the future', async () => {
@@ -120,11 +124,11 @@ describe('prompt lifecycle transitions', () => {
     const id = await addPrompt(basePrompt);
 
     await updatePromptsSetInProgress([Number(id)]);
-    let [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    let prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('in_progress');
 
     await updatePromptSetCompleted(Number(id), completionData);
-    [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('completed');
     expect(prompt?.response).toBe('answer');
     expect(prompt?.completedAt).not.toBeNull();
@@ -133,7 +137,7 @@ describe('prompt lifecycle transitions', () => {
   it('marks a prompt as failed_retry and increments the retry count', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptSetFailed(Number(id), 'network timeout', true);
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('failed_retry');
     expect(prompt?.retryCount).toBe(1);
     expect(prompt?.statusError).toBe('network timeout');
@@ -142,7 +146,7 @@ describe('prompt lifecycle transitions', () => {
   it('marks a prompt as permanently failed without incrementing the retry count', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptSetFailed(Number(id), 'bad request', false);
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('failed');
     expect(prompt?.retryCount).toBe(0);
     expect(prompt?.statusError).toBe('bad request');
@@ -152,7 +156,7 @@ describe('prompt lifecycle transitions', () => {
 describe('getPromptStatusCounts', () => {
   it('returns all zeros when no prompts exist', async () => {
     const counts = await getPromptStatusCounts();
-    expect(counts).toEqual({ queued: 0, pending: 0, completed: 0, failed: 0, callbackPending: 0 });
+    expect(counts).toEqual({ queued: 0, inProgress: 0, completed: 0, failed: 0, callbackPending: 0 });
   });
 
   it('counts prompts correctly across statuses', async () => {
@@ -166,7 +170,7 @@ describe('getPromptStatusCounts', () => {
 
     const counts = await getPromptStatusCounts();
     expect(counts.queued).toBe(1);
-    expect(counts.pending).toBe(1);
+    expect(counts.inProgress).toBe(1);
     expect(counts.completed).toBe(1);
     expect(Number(id1)).toBeGreaterThan(0);
   });
@@ -190,7 +194,7 @@ describe('resetInProgressPrompts', () => {
     const id = await addPrompt(basePrompt);
     await updatePromptsSetInProgress([Number(id)]);
     await resetInProgressPrompts();
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('queued');
   });
 });
@@ -266,19 +270,19 @@ describe('findCallbackPendingPrompts', () => {
   });
 });
 
-describe('deletePromptByClientNameAndRequestId', () => {
+describe('deletePromptByKey with CANCELLABLE_STATUSES', () => {
   it('deletes a queued prompt', async () => {
     await addPrompt(basePrompt);
-    await deletePromptByClientNameAndRequestId('test-client', 'req-1');
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    await deletePromptByKey('test-client', 'req-1', CANCELLABLE_STATUSES);
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt).toBeUndefined();
   });
 
   it('does not delete an in_progress or completed prompt', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptsSetInProgress([Number(id)]);
-    await deletePromptByClientNameAndRequestId('test-client', 'req-1');
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    await deletePromptByKey('test-client', 'req-1', CANCELLABLE_STATUSES);
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('in_progress');
   });
 });
@@ -306,28 +310,28 @@ describe('countQueuedPrompts', () => {
   });
 });
 
-describe('deletePromptForOverwrite', () => {
+describe('deletePromptByKey with OVERWRITABLE_STATUSES', () => {
   it('deletes a queued prompt', async () => {
     await addPrompt(basePrompt);
-    await deletePromptForOverwrite('test-client', 'req-1');
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    await deletePromptByKey('test-client', 'req-1', OVERWRITABLE_STATUSES);
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt).toBeUndefined();
   });
 
-  it('deletes a completed prompt (unlike deletePromptByClientNameAndRequestId)', async () => {
+  it('deletes a completed prompt, unlike the cancellable status list', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptsSetInProgress([Number(id)]);
     await updatePromptSetCompleted(Number(id), completionData);
-    await deletePromptForOverwrite('test-client', 'req-1');
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    await deletePromptByKey('test-client', 'req-1', OVERWRITABLE_STATUSES);
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt).toBeUndefined();
   });
 
   it('does not delete an in_progress prompt', async () => {
     const id = await addPrompt(basePrompt);
     await updatePromptsSetInProgress([Number(id)]);
-    await deletePromptForOverwrite('test-client', 'req-1');
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    await deletePromptByKey('test-client', 'req-1', OVERWRITABLE_STATUSES);
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('in_progress');
   });
 });
@@ -338,10 +342,10 @@ describe('purgeCompletedPrompts', () => {
     await updatePromptsSetInProgress([Number(id)]);
     await updatePromptSetCompleted(Number(id), completionData);
 
-    const purged = await purgeCompletedPrompts(30);
+    const purged = await purgeCompletedPrompts({ olderThanDays: 30 });
 
     expect(purged).toBe(0);
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt).toBeDefined();
   });
 
@@ -350,10 +354,10 @@ describe('purgeCompletedPrompts', () => {
     await updatePromptsSetInProgress([Number(id)]);
     await updatePromptSetCompleted(Number(id), completionData);
 
-    const purged = await purgeCompletedPrompts(-1);
+    const purged = await purgeCompletedPrompts({ olderThanDays: -1 });
 
     expect(purged).toBe(1);
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt).toBeUndefined();
   });
 
@@ -362,7 +366,7 @@ describe('purgeCompletedPrompts', () => {
     await updatePromptsSetInProgress([Number(id)]);
     await updatePromptSetFailed(Number(id), 'timeout', false);
 
-    const purged = await purgeCompletedPrompts(-1);
+    const purged = await purgeCompletedPrompts({ olderThanDays: -1 });
 
     expect(purged).toBe(1);
   });
@@ -370,10 +374,10 @@ describe('purgeCompletedPrompts', () => {
   it('does not purge a queued prompt even with a future cutoff', async () => {
     await addPrompt(basePrompt);
 
-    const purged = await purgeCompletedPrompts(-1);
+    const purged = await purgeCompletedPrompts({ olderThanDays: -1 });
 
     expect(purged).toBe(0);
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt).toBeDefined();
   });
 
@@ -381,10 +385,10 @@ describe('purgeCompletedPrompts', () => {
     const id = await addPrompt(basePrompt);
     await updatePromptsSetInProgress([Number(id)]);
 
-    const purged = await purgeCompletedPrompts(-1);
+    const purged = await purgeCompletedPrompts({ olderThanDays: -1 });
 
     expect(purged).toBe(0);
-    const [prompt] = await findPromptByClientNameAndRequestId('test-client', 'req-1');
+    const prompt = await findPromptByClientNameAndRequestId('test-client', 'req-1');
     expect(prompt?.status).toBe('in_progress');
   });
 
@@ -395,11 +399,11 @@ describe('purgeCompletedPrompts', () => {
     await updatePromptSetCompleted(Number(idA), completionData);
     await updatePromptSetCompleted(Number(idB), completionData);
 
-    const purged = await purgeCompletedPrompts(-1, 'client-a');
+    const purged = await purgeCompletedPrompts({ clientName: 'client-a', olderThanDays: -1 });
 
     expect(purged).toBe(1);
-    const [promptA] = await findPromptByClientNameAndRequestId('client-a', 'req-1');
-    const [promptB] = await findPromptByClientNameAndRequestId('client-b', 'req-1');
+    const promptA = await findPromptByClientNameAndRequestId('client-a', 'req-1');
+    const promptB = await findPromptByClientNameAndRequestId('client-b', 'req-1');
     expect(promptA).toBeUndefined();
     expect(promptB).toBeDefined();
   });

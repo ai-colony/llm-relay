@@ -3,9 +3,12 @@ import { type PromptStatus } from '@db/schema';
 import { and, count, eq, gt, inArray, isNull, lte, not, or, sql } from 'drizzle-orm';
 
 const {
-  dbClient,
-  dbSchema: { prompts }
+  client: databaseClient,
+  schema: { prompts }
 } = database;
+
+// Callbacks delivered per worker tick, FIFO.
+const CALLBACK_BATCH_SIZE = 50;
 
 // Add new prompt to the database
 export const addPrompt = async (prompt: {
@@ -18,7 +21,7 @@ export const addPrompt = async (prompt: {
   priority?: number;
 }) => {
   const { clientName, requestId, callbackUrl, systemPrompt, userPrompt, temperature, priority = 0 } = prompt;
-  const result = await dbClient.insert(prompts).values({
+  const result = await databaseClient.insert(prompts).values({
     clientName,
     requestId,
     createdAt: new Date(),
@@ -37,10 +40,19 @@ export const addPrompt = async (prompt: {
   return result.lastInsertRowid;
 };
 
-// Find prompts that are queued or failed but retryable, ordered by priority then creation time
+// Find prompts that are queued or failed but retryable, ordered by priority then creation time.
+// Projected to exactly what the worker needs — the response/reasoning blobs are always empty here.
 export const findQueuedPrompts = (limit: number) =>
-  dbClient
-    .select()
+  databaseClient
+    .select({
+      id: prompts.id,
+      clientName: prompts.clientName,
+      requestId: prompts.requestId,
+      systemPrompt: prompts.systemPrompt,
+      userPrompt: prompts.userPrompt,
+      temperature: prompts.temperature,
+      retryCount: prompts.retryCount
+    })
     .from(prompts)
     .where(
       and(
@@ -53,7 +65,7 @@ export const findQueuedPrompts = (limit: number) =>
 
 // Update prompts
 export const updatePromptsSetInProgress = (ids: number[]) =>
-  dbClient.update(prompts).set({ status: 'in_progress' }).where(inArray(prompts.id, ids));
+  databaseClient.update(prompts).set({ status: 'in_progress' }).where(inArray(prompts.id, ids));
 
 export const updatePromptSetCompleted = (
   id: number,
@@ -66,7 +78,7 @@ export const updatePromptSetCompleted = (
     responseTokenPerSecond: number;
   }
 ) =>
-  dbClient
+  databaseClient
     .update(prompts)
     .set({
       status: 'completed',
@@ -76,7 +88,7 @@ export const updatePromptSetCompleted = (
     .where(eq(prompts.id, id));
 
 export const updatePromptSetFailed = (id: number, error: string, isRetryable: boolean, nextRetryAt?: Date) =>
-  dbClient
+  databaseClient
     .update(prompts)
     .set({
       status: isRetryable ? 'failed_retry' : 'failed',
@@ -88,8 +100,15 @@ export const updatePromptSetFailed = (id: number, error: string, isRetryable: bo
 
 // Handle callback prompts
 export const findCallbackPendingPrompts = (cutoff: Date) =>
-  dbClient
-    .select()
+  databaseClient
+    .select({
+      id: prompts.id,
+      clientName: prompts.clientName,
+      requestId: prompts.requestId,
+      callbackUrl: prompts.callbackUrl,
+      reasoning: prompts.reasoning,
+      response: prompts.response
+    })
     .from(prompts)
     .where(
       and(
@@ -99,20 +118,32 @@ export const findCallbackPendingPrompts = (cutoff: Date) =>
         gt(prompts.completedAt, cutoff)
       )
     )
-    .limit(50);
+    .limit(CALLBACK_BATCH_SIZE);
 
 export const updatePromptSetCallbackCompleted = (id: number) =>
-  dbClient.update(prompts).set({ callbackCompleted: true }).where(eq(prompts.id, id));
+  databaseClient.update(prompts).set({ callbackCompleted: true }).where(eq(prompts.id, id));
 
-export const findPromptByClientNameAndRequestId = (clientName: string, requestId: string) =>
-  dbClient
-    .select()
+const byKey = (clientName: string, requestId: string) =>
+  and(eq(prompts.clientName, clientName), eq(prompts.requestId, requestId));
+
+// Full row — only GET /prompt/get needs every column.
+export const findPromptByClientNameAndRequestId = async (clientName: string, requestId: string) => {
+  const [row] = await databaseClient.select().from(prompts).where(byKey(clientName, requestId)).limit(1);
+  return row;
+};
+
+// Projection for callers that only branch on the status (POST /prompt/add, DELETE /prompt/cancel).
+export const findPromptStatusByKey = async (clientName: string, requestId: string) => {
+  const [row] = await databaseClient
+    .select({ status: prompts.status })
     .from(prompts)
-    .where(and(eq(prompts.clientName, clientName), eq(prompts.requestId, requestId)))
+    .where(byKey(clientName, requestId))
     .limit(1);
+  return row;
+};
 
 export const findPromptsByClientName = (clientName: string, status?: PromptStatus, limit = 500) =>
-  dbClient
+  databaseClient
     .select({
       priority: prompts.priority,
       requestId: prompts.requestId,
@@ -125,34 +156,26 @@ export const findPromptsByClientName = (clientName: string, status?: PromptStatu
     .orderBy(prompts.createdAt)
     .limit(limit);
 
-export const deletePromptByClientNameAndRequestId = (clientName: string, requestId: string) =>
-  dbClient
-    .delete(prompts)
-    .where(
-      and(
-        eq(prompts.clientName, clientName),
-        eq(prompts.requestId, requestId),
-        inArray(prompts.status, ['queued', 'failed', 'failed_retry'])
-      )
-    );
+// Statuses a prompt may be deleted from. Cancelling refuses to touch a completed prompt; overwriting
+// replaces it. Neither may delete one that is currently in_progress.
+export const CANCELLABLE_STATUSES: PromptStatus[] = ['queued', 'failed', 'failed_retry'];
+export const OVERWRITABLE_STATUSES: PromptStatus[] = ['queued', 'completed', 'failed', 'failed_retry'];
 
-export const deletePromptForOverwrite = (clientName: string, requestId: string) =>
-  dbClient
-    .delete(prompts)
-    .where(
-      and(
-        eq(prompts.clientName, clientName),
-        eq(prompts.requestId, requestId),
-        inArray(prompts.status, ['queued', 'completed', 'failed', 'failed_retry'])
-      )
-    );
+export const deletePromptByKey = (clientName: string, requestId: string, statuses: PromptStatus[]) =>
+  databaseClient.delete(prompts).where(and(byKey(clientName, requestId), inArray(prompts.status, statuses)));
 
 export const resetInProgressPrompts = () =>
-  dbClient.update(prompts).set({ status: 'queued' }).where(eq(prompts.status, 'in_progress'));
+  databaseClient.update(prompts).set({ status: 'queued' }).where(eq(prompts.status, 'in_progress'));
 
-export const purgeCompletedPrompts = async (olderThanDays: number, clientName?: string): Promise<number> => {
+export const purgeCompletedPrompts = async ({
+  clientName,
+  olderThanDays
+}: {
+  clientName?: string;
+  olderThanDays: number;
+}): Promise<number> => {
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
-  const result = await dbClient
+  const result = await databaseClient
     .delete(prompts)
     .where(
       and(
@@ -165,7 +188,7 @@ export const purgeCompletedPrompts = async (olderThanDays: number, clientName?: 
 };
 
 export const countQueuedPrompts = async () => {
-  const [row] = await dbClient
+  const [row] = await databaseClient
     .select({ count: count() })
     .from(prompts)
     .where(inArray(prompts.status, ['queued', 'failed_retry']));
@@ -173,10 +196,10 @@ export const countQueuedPrompts = async () => {
 };
 
 export const getPromptStatusCounts = async () => {
-  const [row] = await dbClient
+  const [row] = await databaseClient
     .select({
       queued: sql<number>`sum(case when ${prompts.status} in ('queued','failed_retry') then 1 else 0 end)`,
-      pending: sql<number>`sum(case when ${prompts.status} = 'in_progress' then 1 else 0 end)`,
+      inProgress: sql<number>`sum(case when ${prompts.status} = 'in_progress' then 1 else 0 end)`,
       completed: sql<number>`sum(case when ${prompts.status} = 'completed' then 1 else 0 end)`,
       failed: sql<number>`sum(case when ${prompts.status} = 'failed' then 1 else 0 end)`,
       callbackPending: sql<number>`sum(case when ${prompts.status} = 'completed' and ${prompts.callbackUrl} is not null and ${prompts.callbackCompleted} = 0 then 1 else 0 end)`
@@ -185,7 +208,7 @@ export const getPromptStatusCounts = async () => {
 
   return {
     queued: row?.queued ?? 0,
-    pending: row?.pending ?? 0,
+    inProgress: row?.inProgress ?? 0,
     completed: row?.completed ?? 0,
     failed: row?.failed ?? 0,
     callbackPending: row?.callbackPending ?? 0
