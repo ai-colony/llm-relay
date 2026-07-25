@@ -41,14 +41,19 @@ describe('checkCallbackAvailability', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns true when fetch resolves with any HTTP status', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }));
+  it('returns true when the probe succeeds', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
     expect(await checkCallbackAvailability('https://example.com/hook')).toBe(true);
   });
 
-  it('returns true when fetch resolves with a 404', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 404 }));
+  it.each([405, 501])('returns true when the host answers %i (HEAD not implemented)', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status }));
     expect(await checkCallbackAvailability('https://example.com/hook')).toBe(true);
+  });
+
+  it.each([404, 410, 500, 503])('returns false when the probe responds %i', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status }));
+    expect(await checkCallbackAvailability('https://example.com/hook')).toBe(false);
   });
 
   it('returns false when fetch throws a network error', async () => {
@@ -62,7 +67,7 @@ describe('checkCallbackAvailability', () => {
   });
 
   it('probes using HEAD method', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({ status: 200 });
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', mockFetch);
     await checkCallbackAvailability('https://example.com/hook');
     expect(mockFetch).toHaveBeenCalledWith('https://example.com/hook', expect.objectContaining({ method: 'HEAD' }));

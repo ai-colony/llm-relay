@@ -1,27 +1,35 @@
-vi.mock('../../src/lib/config', () => ({
-  config: {
-    openai: { url: 'http://test-server/v1', model: 'test-model', key: 'test-key', timeout: 5000 },
-    log: { level: 'silent' },
-    http: { port: 3000 },
-    database: { filename: ':memory:' }
-  }
-}));
+function makeOpenAIMock() {
+  return {
+    default: class MockOpenAI {
+      chat = { completions: { create: mockCompletionsCreate } };
+    }
+  };
+}
 
-vi.mock('../../src/lib/logger', () => ({
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
-}));
+function makeConfigMock(model: string, modelCacheTtlMs = 60_000) {
+  return {
+    config: {
+      openai: { url: 'http://test/v1', model, key: 'k', timeout: 5000, modelCacheTtlMs },
+      log: { level: 'silent' },
+      http: { port: 3000 },
+      database: { filename: ':memory:' }
+    }
+  };
+}
 
-const { mockModelsList, mockCompletionsCreate } = vi.hoisted(() => ({
-  mockModelsList: vi.fn(),
-  mockCompletionsCreate: vi.fn()
-}));
+function makeLoggerMock() {
+  return { logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } };
+}
 
-vi.mock('openai', () => ({
-  default: class MockOpenAI {
-    models = { list: mockModelsList };
-    chat = { completions: { create: mockCompletionsCreate } };
-  }
-}));
+// One config factory for the whole file, so modelCacheTtlMs — which openAI.ts reads when deciding
+// whether the cached model is stale — can never be missing from one mock and present in another.
+vi.mock('../../src/lib/config', () => makeConfigMock('test-model'));
+
+vi.mock('../../src/lib/logger', () => makeLoggerMock());
+
+const { mockCompletionsCreate } = vi.hoisted(() => ({ mockCompletionsCreate: vi.fn() }));
+
+vi.mock('openai', () => makeOpenAIMock());
 
 import { checkOpenAI, executeOpenAIPrompt, streamChatCompletion } from '../../src/lib/openAI';
 
@@ -183,24 +191,6 @@ describe('streamChatCompletion', () => {
   });
 });
 
-const makeOpenAIMock = () => ({
-  default: class MockOpenAI {
-    models = { list: mockModelsList };
-    chat = { completions: { create: mockCompletionsCreate } };
-  }
-});
-
-const makeConfigMock = (model: string, modelCacheTtlMs = 60_000) => ({
-  config: {
-    openai: { url: 'http://test/v1', model, key: 'k', timeout: 5000, modelCacheTtlMs },
-    log: {},
-    http: {},
-    database: {}
-  }
-});
-
-const makeLoggerMock = () => ({ logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } });
-
 function makeModelsFetch(
   data: Array<{ id: string; meta?: { n_ctx?: number } }>,
   isOk = true
@@ -215,7 +205,6 @@ function makeModelsFetch(
 describe('resolveModel / resolveModelInfo', () => {
   beforeEach(() => {
     vi.resetModules();
-    mockModelsList.mockReset();
     mockCompletionsCreate.mockReset();
   });
 
@@ -237,6 +226,47 @@ describe('resolveModel / resolveModelInfo', () => {
     await exec({ system: undefined, user: 'second' }, 0);
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('issues a single /models request when concurrent callers race the first resolution', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model'));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    // Resolves on a later tick, so all four callers observe the request still in flight.
+    const mockFetch = vi
+      .fn()
+      .mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () => resolve({ ok: true, status: 200, json: () => Promise.resolve({ data: [{ id: 'test-model' }] }) }),
+              10
+            )
+          )
+      );
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { getModelInfo: get } = await import('../../src/lib/openAI');
+    await Promise.all([get(), get(), get(), get()]);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-queries once the cache TTL has elapsed', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model', 0.001));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    const mockFetch = makeModelsFetch([{ id: 'test-model' }]);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const { getModelInfo: get } = await import('../../src/lib/openAI');
+    await get();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await get();
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to the first available model when config.openai.model is empty', async () => {
