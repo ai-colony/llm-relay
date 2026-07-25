@@ -10,12 +10,11 @@ const sqlite = new DatabaseSync(config.database.filename);
 const client = drizzle({ client: sqlite });
 
 export const database = {
-  dbClient: client,
-  dbSchema: schema
+  client,
+  schema
 };
 
-export type { SqliteError } from './errors';
-export { SQLITE_CONSTRAINT_UNIQUE } from './errors';
+export { isUniqueConstraintError, SQLITE_CONSTRAINT_UNIQUE, type SqliteError } from './errors';
 
 export const closeDatabase = () => sqlite.close();
 

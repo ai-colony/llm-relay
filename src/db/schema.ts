@@ -1,6 +1,8 @@
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-export type PromptStatus = 'queued' | 'in_progress' | 'completed' | 'failed' | 'failed_retry';
+export const PROMPT_STATUSES = ['queued', 'in_progress', 'completed', 'failed', 'failed_retry'] as const;
+
+export type PromptStatus = (typeof PROMPT_STATUSES)[number];
 
 export const prompts = sqliteTable(
   'prompts',
@@ -12,7 +14,7 @@ export const prompts = sqliteTable(
     callbackCompleted: integer({ mode: 'boolean' }).notNull(),
 
     createdAt: integer({ mode: 'timestamp' }).notNull(),
-    status: text({ enum: ['queued', 'in_progress', 'completed', 'failed', 'failed_retry'] }).notNull(),
+    status: text({ enum: PROMPT_STATUSES }).notNull(),
     statusError: text(),
     completedAt: integer({ mode: 'timestamp' }),
 
