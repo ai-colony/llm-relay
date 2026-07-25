@@ -59,6 +59,6 @@ Test files are typechecked too: `npm run typecheck` uses `tsconfig.test.json`, w
 
 ## Submitting a PR
 
-1. Run `npm run all` and make sure it passes. CI runs the same checks on your branch and again on the PR itself, so a red pipeline blocks the merge.
+1. Run `npm run all` and make sure it passes. CI runs the same checks on every push to your branch, and those results show up on the PR.
 2. Write a clear PR description explaining _why_ the change is needed, not just what changed.
 3. Squash fixup commits before requesting review.

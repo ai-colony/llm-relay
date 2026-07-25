@@ -103,7 +103,9 @@ SQLite via Drizzle ORM (`drizzle-orm/node-sqlite`) using the Node.js built-in `n
 
 PRs target `main`. One logical change per PR. Run `npm run all` before opening a PR.
 
-CI (`.github/workflows/ci-dev.yaml`) runs format, lint, typecheck, build, and `test:coverage` on every push to a non-`main` branch and on every PR into `main`. The publish workflow reuses it via `workflow_call`, so nothing ships to ghcr.io without passing the same gate.
+CI (`.github/workflows/ci-dev.yaml`) runs format, lint, typecheck, build, and `test:coverage` on every push to a non-`main` branch — those check runs attach to the commit, so they surface on the PR too. `ci-publish-docker.yaml` reuses the same job via `workflow_call` before building, so nothing ships to ghcr.io without passing it.
+
+There is deliberately no `pull_request` trigger: it would double every run (branch commit + merge commit). The trade-off is that fork PRs and the merged-into-`main` result are not tested before merge.
 
 ## Security concerns
 

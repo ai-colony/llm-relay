@@ -4,9 +4,7 @@ on:
   push:
     branches-ignore:
       - main
-  pull_request:
-    branches:
-      - main
+  # Reused by ci-publish-docker.yaml so nothing ships to ghcr.io without passing these checks.
   workflow_call:
 
 concurrency:
