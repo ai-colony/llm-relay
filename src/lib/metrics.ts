@@ -1,16 +1,17 @@
 type Labels = Record<string, string>;
 
-type CounterEntry = { help: string; values: Map<string, { labels: Labels; value: number }> };
+type ScalarEntry = { help: string; values: Map<string, { labels: Labels; value: number }> };
 type HistogramEntry = {
   help: string;
   buckets: number[];
   values: Map<string, { labels: Labels; bucketCounts: number[]; sum: number; count: number }>;
 };
 
-const counters = new Map<string, CounterEntry>();
+const counters = new Map<string, ScalarEntry>();
+const gauges = new Map<string, ScalarEntry>();
 const histograms = new Map<string, HistogramEntry>();
 
-export const DEFAULT_DURATION_BUCKETS = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30];
+const DEFAULT_DURATION_BUCKETS = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30];
 
 const serializeLabels = (labels: Labels): string => {
   const keys = Object.keys(labels).toSorted((a, b) => a.localeCompare(b));
@@ -26,6 +27,12 @@ export const incCounter = (name: string, help: string, labels: Labels = {}, valu
   counters.set(name, entry);
 };
 
+export const setGauge = (name: string, help: string, value: number, labels: Labels = {}): void => {
+  const entry = gauges.get(name) ?? { help, values: new Map() };
+  entry.values.set(serializeLabels(labels), { labels, value });
+  gauges.set(name, entry);
+};
+
 export const observeHistogram = (
   name: string,
   help: string,
@@ -34,10 +41,13 @@ export const observeHistogram = (
   buckets: number[] = DEFAULT_DURATION_BUCKETS
 ): void => {
   const entry = histograms.get(name) ?? { help, buckets, values: new Map() };
+  // The first observation fixes the bucket boundaries for this metric name; later calls must reuse
+  // them, otherwise bucketCounts would be sized differently than renderMetrics() iterates them.
+  const entryBuckets = entry.buckets;
   const key = serializeLabels(labels);
-  const current = entry.values.get(key) ?? { labels, bucketCounts: buckets.map(() => 0), sum: 0, count: 0 };
+  const current = entry.values.get(key) ?? { labels, bucketCounts: entryBuckets.map(() => 0), sum: 0, count: 0 };
 
-  for (const [index, bound] of buckets.entries()) if (valueSeconds <= bound) current.bucketCounts[index] += 1;
+  for (const [index, bound] of entryBuckets.entries()) if (valueSeconds <= bound) current.bucketCounts[index] += 1;
   current.sum += valueSeconds;
   current.count += 1;
 
@@ -45,13 +55,33 @@ export const observeHistogram = (
   histograms.set(name, entry);
 };
 
+export type UpstreamMetricsSpec = {
+  counter: { name: string; help: string };
+  histogram: { name: string; help: string };
+};
+
+// Shared by the prompt worker and POST /chat/completions: both record a success/failure counter plus
+// a duration histogram around a single upstream call.
+export const recordUpstreamMetrics = (
+  spec: UpstreamMetricsSpec,
+  result: 'success' | 'failure',
+  startedAtMs: number
+): void => {
+  incCounter(spec.counter.name, spec.counter.help, { result });
+  observeHistogram(spec.histogram.name, spec.histogram.help, {}, (performance.now() - startedAtMs) / 1000);
+};
+
 export const renderMetrics = (): string => {
   const lines: string[] = [];
 
-  for (const [name, entry] of counters) {
-    lines.push(`# HELP ${name} ${entry.help}`, `# TYPE ${name} counter`);
-    for (const { labels, value } of entry.values.values()) lines.push(`${name}${serializeLabels(labels)} ${value}`);
-  }
+  for (const [type, registry] of [
+    ['counter', counters],
+    ['gauge', gauges]
+  ] as const)
+    for (const [name, entry] of registry) {
+      lines.push(`# HELP ${name} ${entry.help}`, `# TYPE ${name} ${type}`);
+      for (const { labels, value } of entry.values.values()) lines.push(`${name}${serializeLabels(labels)} ${value}`);
+    }
 
   for (const [name, entry] of histograms) {
     lines.push(`# HELP ${name} ${entry.help}`, `# TYPE ${name} histogram`);
@@ -71,5 +101,6 @@ export const renderMetrics = (): string => {
 
 export const resetMetrics = (): void => {
   counters.clear();
+  gauges.clear();
   histograms.clear();
 };

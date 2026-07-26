@@ -3,6 +3,9 @@ import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // Mirrors the `paths` in tsconfig.json. Vite's native `resolve.tsconfigPaths` is a boolean and
+  // honours the base config's `exclude: ["test"]`, so test files would lose their aliases; it
+  // cannot be pointed at tsconfig.test.json. Keep this map in sync when adding an alias.
   resolve: {
     alias: {
       '@lib': path.resolve('src/lib'),

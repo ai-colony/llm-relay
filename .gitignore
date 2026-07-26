@@ -12,8 +12,8 @@ coverage
 *.sqlite
 
 # Environment
-.env
-.env.docker
+.env*
+!.env.example
 
 # macOS
 .DS_Store

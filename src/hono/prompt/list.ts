@@ -1,14 +1,10 @@
 import { zValidator } from '@hono/zod-validator';
 import { findPromptsByClientName } from '@prompt/repo';
 import { Hono } from 'hono';
-import { z } from 'zod';
 
-const QuerySchema = z.object({
-  clientName: z.string().min(1),
-  status: z.enum(['queued', 'in_progress', 'completed', 'failed', 'failed_retry']).optional()
-});
+import { ListQuerySchema } from './schemas';
 
-export const list = new Hono().get('/', zValidator('query', QuerySchema), async (c) => {
+export const list = new Hono().get('/', zValidator('query', ListQuerySchema), async (c) => {
   const { clientName, status } = c.req.valid('query');
   const rows = await findPromptsByClientName(clientName, status);
   return c.json(rows, 200);

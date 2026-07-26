@@ -1,18 +1,19 @@
 import { zValidator } from '@hono/zod-validator';
-import { deletePromptByClientNameAndRequestId, findPromptByClientNameAndRequestId } from '@prompt/repo';
+import { CANCELLABLE_STATUSES, deletePromptByKey, findPromptStatusByKey } from '@prompt/repo';
 import { Hono } from 'hono';
 
-import { QuerySchema } from './schemas';
+import { jsonError } from '../errors';
+import { PromptKeyQuerySchema } from './schemas';
 
-export const cancel = new Hono().delete('/', zValidator('query', QuerySchema), async (c) => {
+export const cancel = new Hono().delete('/', zValidator('query', PromptKeyQuerySchema), async (c) => {
   const { clientName, requestId } = c.req.valid('query');
-  const [prompt] = await findPromptByClientNameAndRequestId(clientName, requestId);
+  const prompt = await findPromptStatusByKey(clientName, requestId);
 
-  if (!prompt) return c.json({ success: false, error: 'Prompt not found' }, 404);
+  if (!prompt) return jsonError(c, 404, 'Prompt not found');
 
   if (prompt.status === 'in_progress' || prompt.status === 'completed')
-    return c.json({ success: false, error: `Cannot cancel a prompt with status '${prompt.status}'` }, 409);
+    return jsonError(c, 409, `Cannot cancel a prompt with status '${prompt.status}'`);
 
-  await deletePromptByClientNameAndRequestId(clientName, requestId);
+  await deletePromptByKey(clientName, requestId, CANCELLABLE_STATUSES);
   return c.json({ success: true }, 200);
 });

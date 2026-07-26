@@ -2,26 +2,22 @@ import path from 'node:path';
 
 import OpenAI from 'openai';
 import type { ChatCompletionChunk, ChatCompletionMessageParam } from 'openai/resources';
-import type { z } from 'zod';
 
-import type { RelayMessageSchema, RelayToolSchema } from '../hono/chat/schemas';
+import type { RelayMessage, RelayTool } from './chatSchemas';
 import { config } from './config';
 import { logger } from './logger';
 
-type RelayMessage = z.infer<typeof RelayMessageSchema>;
-type RelayTool = z.infer<typeof RelayToolSchema>;
-
-// Types
-type LlamaDelta = ChatCompletionChunk.Choice.Delta & {
+// Types — the upstream chunk shape plus the reasoning_content field OpenAI-compatible backends add.
+type RelayDelta = ChatCompletionChunk.Choice.Delta & {
   reasoning_content?: string;
 };
 
-type LlamaChoice = Omit<ChatCompletionChunk.Choice, 'delta'> & {
-  delta: LlamaDelta;
+type RelayChoice = Omit<ChatCompletionChunk.Choice, 'delta'> & {
+  delta: RelayDelta;
 };
 
-type LlamaChunk = Omit<ChatCompletionChunk, 'choices'> & {
-  choices: LlamaChoice[];
+type RelayChunk = Omit<ChatCompletionChunk, 'choices'> & {
+  choices: RelayChoice[];
 };
 
 const openai = new OpenAI({
@@ -39,11 +35,16 @@ const HEALTH_CHECK_TIMEOUT_MS = 5000;
 let resolvedModelInfoPromise: Promise<ModelInfo> | undefined;
 let resolvedAt = 0;
 
-const resolveModelInfo = (): Promise<ModelInfo> => {
+export const getModelInfo = (): Promise<ModelInfo> => {
   if (resolvedModelInfoPromise && Date.now() - resolvedAt > config.openai.modelCacheTtlMs)
     resolvedModelInfoPromise = undefined;
 
-  if (!resolvedModelInfoPromise)
+  if (!resolvedModelInfoPromise) {
+    // Stamped here rather than only after the fetch resolves: while the request is in flight the TTL
+    // check above must not consider the cache stale, or every concurrent caller would discard the
+    // in-flight promise and fire its own /models request. Re-stamped on success below so the TTL
+    // window measures from the resolved value.
+    resolvedAt = Date.now();
     resolvedModelInfoPromise = (async () => {
       const requestedModel = config.openai.model;
       const response = await fetch(`${config.openai.url}/models`, {
@@ -63,16 +64,15 @@ const resolveModelInfo = (): Promise<ModelInfo> => {
       resolvedModelInfoPromise = undefined;
       throw error;
     });
+  }
 
   return resolvedModelInfoPromise;
 };
 
 const resolveModel = async (): Promise<string> => {
-  const info = await resolveModelInfo();
+  const info = await getModelInfo();
   return info.model;
 };
-
-export const getModelInfo = (): Promise<ModelInfo> => resolveModelInfo();
 
 export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
   let response: Response;
@@ -92,7 +92,7 @@ export const streamChatCompletion = async function* (
   tools?: RelayTool[],
   temperature?: number,
   signal?: AbortSignal
-): AsyncGenerator<LlamaChunk> {
+): AsyncGenerator<RelayChunk> {
   const model = await resolveModel();
   const completion = (await openai.chat.completions.create(
     {
@@ -103,7 +103,7 @@ export const streamChatCompletion = async function* (
       stream: true
     },
     { signal }
-  )) as unknown as AsyncIterable<LlamaChunk>;
+  )) as unknown as AsyncIterable<RelayChunk>;
 
   for await (const chunk of completion) yield chunk;
 };
@@ -142,7 +142,7 @@ export const executeOpenAIPrompt = async (
       : [{ role: 'user', content: prompt.user }],
     temperature,
     stream: true
-  })) as unknown as AsyncIterable<LlamaChunk>;
+  })) as unknown as AsyncIterable<RelayChunk>;
 
   let reasoning = '';
   let response = '';
@@ -158,21 +158,21 @@ export const executeOpenAIPrompt = async (
     const delta = part.choices[0]?.delta;
 
     const content = delta?.content ?? '';
-    const reasoning_content = delta?.reasoning_content ?? '';
+    const reasoningContent = delta?.reasoning_content ?? '';
 
-    if (isReasoningStarted && !isReasoningEnded && !reasoning_content) {
+    if (isReasoningStarted && !isReasoningEnded && !reasoningContent) {
       isReasoningEnded = true;
       reasoningEndedAt = Date.now();
     }
 
-    if (!isReasoningStarted && reasoning_content) {
+    if (!isReasoningStarted && reasoningContent) {
       isReasoningStarted = true;
       reasoningStartedAt = Date.now();
     }
 
-    if (reasoning_content) {
-      reasoning += reasoning_content;
-      reasoningChars += reasoning_content.length;
+    if (reasoningContent) {
+      reasoning += reasoningContent;
+      reasoningChars += reasoningContent.length;
     }
     if (content) {
       if (!responseStartedAt) responseStartedAt = Date.now();
@@ -194,6 +194,6 @@ export const executeOpenAIPrompt = async (
     responseTimeMs,
     responseTokenPerSecond: responseTimeMs > 0 ? Math.round(responseToken / (responseTimeMs / 1000)) : 0
   };
-  logger.info({ component: 'openai', model, ...timing }, 'Prompt completed');
+  logger.info({ component: 'openai', model, ...timing }, 'Upstream completion finished');
   return { reasoning, response, timing };
 };

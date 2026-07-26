@@ -2,23 +2,21 @@ vi.mock('../../src/lib/openAI', () => ({
   streamChatCompletion: vi.fn()
 }));
 
-vi.mock('../../src/lib/logger', () => ({
-  logger: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() }
-}));
+vi.mock('../../src/lib/logger', async () => {
+  const { makeLoggerMock } = await import('../helpers/mocks');
+  return { logger: makeLoggerMock() };
+});
 
 import { completions } from '../../src/hono/chat/completions';
 import { streamChatCompletion } from '../../src/lib/openAI';
+import { postJson as post } from '../helpers/mocks';
 
 const validMessages = [{ role: 'user', content: 'Hello' }];
 
-const postJson = (body: unknown) =>
-  completions.request('/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+const postJson = (body: unknown) => post(completions, body);
 
-async function* makeChunks(chunks: object[]) {
+// Yields `any` so the loose chunk literals below satisfy streamChatCompletion's RelayChunk generic.
+async function* makeChunks(chunks: object[]): AsyncGenerator<any> {
   for (const chunk of chunks) yield chunk;
 }
 

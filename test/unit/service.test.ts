@@ -1,14 +1,18 @@
-vi.mock('@lib', () => ({
-  executeOpenAIPrompt: vi.fn(),
-  incCounter: vi.fn(),
-  observeHistogram: vi.fn(),
-  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-  config: {
-    openai: { maxRetryCount: 10 },
-    worker: { concurrency: 1 },
-    callback: { retryTtlHours: 24, hmacSecret: '' }
-  }
-}));
+vi.mock('@lib', async () => {
+  const { makeLoggerMock } = await import('../helpers/mocks');
+  return {
+    executeOpenAIPrompt: vi.fn(),
+    incCounter: vi.fn(),
+    observeHistogram: vi.fn(),
+    recordUpstreamMetrics: vi.fn(),
+    logger: makeLoggerMock(),
+    config: {
+      openai: { maxRetryCount: 10 },
+      worker: { concurrency: 1 },
+      callback: { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: '' }
+    }
+  };
+});
 
 vi.mock('../../src/prompt/repo', () => ({
   addPrompt: vi.fn(),
@@ -34,26 +38,26 @@ import {
 } from '../../src/prompt/repo';
 import { processCallbackPendingPrompts, processQueuedPrompts } from '../../src/prompt/service';
 
+// Mirrors the projection findQueuedPrompts actually selects.
 const makeQueuedPrompt = (overrides: Record<string, unknown> = {}) => ({
   id: 1,
   clientName: 'test-client',
-  requestId: 1,
-  callbackUrl: null,
-  callbackCompleted: false,
-  createdAt: new Date(),
-  status: 'queued',
-  statusError: null,
-  completedAt: null,
+  requestId: 'req-1',
   systemPrompt: null,
   userPrompt: 'hello',
   temperature: 0.7,
   retryCount: 0,
+  ...overrides
+});
+
+// Mirrors the projection findCallbackPendingPrompts actually selects.
+const makeCallbackPrompt = (overrides: Record<string, unknown> = {}) => ({
+  id: 1,
+  clientName: 'test-client',
+  requestId: 'req-1',
+  callbackUrl: 'https://example.com/callback',
   reasoning: null,
   response: null,
-  reasoningTimeMs: null,
-  reasoningTokenPerSecond: null,
-  responseTimeMs: null,
-  responseTokenPerSecond: null,
   ...overrides
 });
 
@@ -237,12 +241,7 @@ describe('processCallbackPendingPrompts', () => {
   });
 
   it('sends the callback and marks it as completed on success', async () => {
-    const prompt = makeQueuedPrompt({
-      status: 'completed',
-      callbackUrl: 'https://example.com/callback',
-      reasoning: 'thought',
-      response: 'answer'
-    });
+    const prompt = makeCallbackPrompt({ reasoning: 'thought', response: 'answer' });
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     const mockFetch = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', mockFetch);
@@ -253,8 +252,49 @@ describe('processCallbackPendingPrompts', () => {
     expect(updatePromptSetCallbackCompleted).toHaveBeenCalledWith(1);
   });
 
+  it('delivers a batch of callbacks concurrently rather than one at a time', async () => {
+    const prompts = Array.from({ length: 5 }, (_, index) =>
+      makeCallbackPrompt({ id: index + 1, requestId: `req-${index + 1}` })
+    );
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue(prompts);
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return { ok: true };
+      })
+    );
+
+    await processCallbackPendingPrompts();
+
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(updatePromptSetCallbackCompleted).toHaveBeenCalledTimes(5);
+  });
+
+  it('still delivers the rest of the batch when one callback fails', async () => {
+    vi.mocked(findCallbackPendingPrompts).mockResolvedValue([
+      makeCallbackPrompt({ id: 1, requestId: 'req-1' }),
+      makeCallbackPrompt({ id: 2, requestId: 'req-2' })
+    ]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValueOnce(new Error('network error')).mockResolvedValueOnce({ ok: true })
+    );
+
+    await processCallbackPendingPrompts();
+
+    expect(updatePromptSetCallbackCompleted).toHaveBeenCalledTimes(1);
+    expect(updatePromptSetCallbackCompleted).toHaveBeenCalledWith(2);
+  });
+
   it('logs the error and skips marking complete when the fetch throws', async () => {
-    const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: 'https://example.com/callback' });
+    const prompt = makeCallbackPrompt();
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
 
@@ -264,7 +304,7 @@ describe('processCallbackPendingPrompts', () => {
   });
 
   it('skips marking complete when the callback endpoint responds with a non-ok status', async () => {
-    const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: 'https://example.com/callback' });
+    const prompt = makeCallbackPrompt();
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
 
@@ -274,7 +314,7 @@ describe('processCallbackPendingPrompts', () => {
   });
 
   it('skips prompts that have no callback URL', async () => {
-    const prompt = makeQueuedPrompt({ status: 'completed', callbackUrl: null });
+    const prompt = makeCallbackPrompt({ callbackUrl: null });
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     const mockFetch = vi.fn();
     vi.stubGlobal('fetch', mockFetch);
@@ -286,16 +326,11 @@ describe('processCallbackPendingPrompts', () => {
   });
 
   it('does not include X-LLM-Relay-Signature header when hmacSecret is not set', async () => {
-    const prompt = makeQueuedPrompt({
-      status: 'completed',
-      callbackUrl: 'https://example.com/callback',
-      reasoning: 'thought',
-      response: 'answer'
-    });
+    const prompt = makeCallbackPrompt({ reasoning: 'thought', response: 'answer' });
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     const mockFetch = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', mockFetch);
-    vi.mocked(config).callback = { retryTtlHours: 24, hmacSecret: '' };
+    vi.mocked(config).callback = { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: '' };
 
     await processCallbackPendingPrompts();
 
@@ -304,16 +339,11 @@ describe('processCallbackPendingPrompts', () => {
   });
 
   it('includes a correct X-LLM-Relay-Signature header when hmacSecret is set', async () => {
-    const prompt = makeQueuedPrompt({
-      status: 'completed',
-      callbackUrl: 'https://example.com/callback',
-      reasoning: 'thought',
-      response: 'answer'
-    });
+    const prompt = makeCallbackPrompt({ reasoning: 'thought', response: 'answer' });
     vi.mocked(findCallbackPendingPrompts).mockResolvedValue([prompt]);
     const mockFetch = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', mockFetch);
-    vi.mocked(config).callback = { retryTtlHours: 24, hmacSecret: 'mysecret' };
+    vi.mocked(config).callback = { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: 'mysecret' };
 
     await processCallbackPendingPrompts();
 

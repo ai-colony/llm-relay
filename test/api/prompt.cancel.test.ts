@@ -1,61 +1,69 @@
 vi.mock('../../src/prompt/repo', () => ({
-  findPromptByClientNameAndRequestId: vi.fn(),
-  deletePromptByClientNameAndRequestId: vi.fn()
+  findPromptStatusByKey: vi.fn(),
+  deletePromptByKey: vi.fn(),
+  CANCELLABLE_STATUSES: ['queued', 'failed', 'failed_retry']
 }));
 
 import { cancel } from '../../src/hono/prompt/cancel';
-import { deletePromptByClientNameAndRequestId, findPromptByClientNameAndRequestId } from '../../src/prompt/repo';
+import { CANCELLABLE_STATUSES, deletePromptByKey, findPromptStatusByKey } from '../../src/prompt/repo';
+import { readJson, withQuery } from '../helpers/mocks';
 
 const deleteRequest = (clientName: string, requestId: string) =>
-  cancel.request(`/?clientName=${encodeURIComponent(clientName)}&requestId=${encodeURIComponent(requestId)}`, {
-    method: 'DELETE'
-  });
+  cancel.request(withQuery({ clientName, requestId }), { method: 'DELETE' });
 
 describe('DELETE /prompt/cancel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('returns 404 when the prompt does not exist', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([]);
+    vi.mocked(findPromptStatusByKey).mockResolvedValue(undefined);
     const response = await deleteRequest('test', 'req-1');
     expect(response.status).toBe(404);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
   });
 
   it('returns 409 when the prompt is in_progress', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([{ status: 'in_progress' } as never]);
+    vi.mocked(findPromptStatusByKey).mockResolvedValue({ status: 'in_progress' } as never);
     const response = await deleteRequest('test', 'req-1');
     expect(response.status).toBe(409);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(false);
   });
 
   it('returns 409 when the prompt is already completed', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([{ status: 'completed' } as never]);
+    vi.mocked(findPromptStatusByKey).mockResolvedValue({ status: 'completed' } as never);
     const response = await deleteRequest('test', 'req-1');
     expect(response.status).toBe(409);
   });
 
   it('cancels a queued prompt and returns success', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([
-      { status: 'queued', clientName: 'test', requestId: 'req-1' } as never
-    ]);
-    vi.mocked(deletePromptByClientNameAndRequestId).mockResolvedValue({} as never);
+    vi.mocked(findPromptStatusByKey).mockResolvedValue({
+      status: 'queued',
+      clientName: 'test',
+      requestId: 'req-1'
+    } as never);
+    vi.mocked(deletePromptByKey).mockResolvedValue({} as never);
 
     const response = await deleteRequest('test', 'req-1');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(true);
-    expect(deletePromptByClientNameAndRequestId).toHaveBeenCalledWith('test', 'req-1');
+    expect(deletePromptByKey).toHaveBeenCalledWith('test', 'req-1', CANCELLABLE_STATUSES);
   });
 
   it('cancels a failed prompt and returns success', async () => {
-    vi.mocked(findPromptByClientNameAndRequestId).mockResolvedValue([
-      { status: 'failed', clientName: 'test', requestId: 'req-2' } as never
-    ]);
-    vi.mocked(deletePromptByClientNameAndRequestId).mockResolvedValue({} as never);
+    vi.mocked(findPromptStatusByKey).mockResolvedValue({
+      status: 'failed',
+      clientName: 'test',
+      requestId: 'req-2'
+    } as never);
+    vi.mocked(deletePromptByKey).mockResolvedValue({} as never);
 
     const response = await deleteRequest('test', 'req-2');
     expect(response.status).toBe(200);
-    const body = await response.json();
+    const body = await readJson(response);
     expect(body.success).toBe(true);
   });
 
