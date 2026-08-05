@@ -1,3 +1,9 @@
+// A real .env file in the working directory (e.g. a developer's local `.env` for running the
+// server) must not leak into these tests: dotenv's `config()` populates any process.env key that
+// isn't already set, which silently undoes `withEnvironment`'s deletions and makes assertions like
+// "config.embedding is undefined when EMBEDDING_URL is unset" depend on the machine running them.
+vi.mock('dotenv', () => ({ config: vi.fn() }));
+
 import { withEnvironment } from '../helpers/environment';
 
 describe('config', () => {

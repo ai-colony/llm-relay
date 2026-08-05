@@ -368,27 +368,18 @@ const spec = {
         properties: {
           version: { type: 'string' },
           uptime: { type: 'integer', description: 'Process uptime in seconds' },
-          model: { type: 'string', description: 'Active model name; absent when the upstream is unreachable' },
-          contextSize: {
-            type: 'integer',
-            description: 'Model context window size in tokens; absent when not reported by the upstream'
-          },
-          queued: { type: 'integer' },
-          inProgress: { type: 'integer' },
-          completed: { type: 'integer' },
-          failed: { type: 'integer' },
-          callbackPending: { type: 'integer' },
+          generative: reference('ModelQueueSummary'),
           embedding: {
-            ...reference('EmbeddingStatusSummary'),
+            ...reference('ModelQueueSummary'),
             description: 'Present only when an embedding backend is configured'
           }
         },
-        required: ['version', 'uptime', 'queued', 'inProgress', 'completed', 'failed', 'callbackPending']
+        required: ['version', 'uptime', 'generative']
       },
-      EmbeddingStatusSummary: {
+      ModelQueueSummary: {
         type: 'object',
         properties: {
-          model: { type: 'string', description: 'Active embedding model; absent when the upstream is unreachable' },
+          model: { type: 'string', description: 'Active model name; absent when the upstream is unreachable' },
           contextSize: { type: 'integer', description: 'Absent when not reported by the upstream' },
           queued: { type: 'integer' },
           inProgress: { type: 'integer' },

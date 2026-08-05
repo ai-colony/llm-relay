@@ -45,6 +45,8 @@ Prometheus metrics are renamed to match. **Dashboards, recording rules and alert
 
 The last row disambiguates it from the new `llm_relay_embedding_callbacks_pending`. `http_requests_total`, `http_request_duration_seconds`, `callback_deliveries_total`, `llm_relay_prompts_*` and `llm_relay_uptime_seconds` are unchanged — they were already backend-agnostic.
 
+- **BREAKING — `GET /status`**: the top-level generative fields (`model`, `contextSize`, `queued`, `inProgress`, `completed`, `failed`, `callbackPending`) are now nested under a new `generative` object, mirroring the existing `embedding` block and matching the `checks.generative` / `checks.embedding` shape `GET /health` already uses. `version` and `uptime` remain top-level. `generative` is always present; `embedding` continues to appear only when an embedding backend is configured.
+
 ### Fixed
 
 - **`npm run drizzle:generate` crashed** with `TypeError: drizzle_orm_sqlite_core.SQLiteSyncDialect is not a constructor`. A caret range containing a prerelease matches _any_ prerelease sharing the same `1.0.0` tuple, so `^1.0.0-beta.22` also matched drizzle's per-branch snapshot builds (`1.0.0-rc.4-<commit>`, published one package at a time under tags like `sqlite-update` and `postgres`). Each package independently resolved to its own highest snapshot — `ca0f029` for drizzle-kit, `de6c356` for drizzle-orm — and the two unrelated builds are not wire-compatible. Both are now pinned exactly to `1.0.0-rc.4`, the coordinated release both packages published together under the `rc` dist-tag. Keep them exact and in lockstep: drizzle-kit imports drizzle-orm from the consumer's `node_modules` but declares no `peerDependencies` on it, so a mismatched pair fails at `generate` time rather than at install.

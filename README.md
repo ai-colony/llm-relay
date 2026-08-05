@@ -202,19 +202,21 @@ The `embedding` check appears — and counts toward the verdict — only when `E
 
 ### `GET /status`
 
-Returns queue counts and server uptime. The `embedding` block is present only when an embedding backend is configured.
+Returns queue counts and server uptime, split into a `generative` block (always present) and an `embedding` block (present only when an embedding backend is configured) — mirroring `GET /health`'s `checks.generative` / `checks.embedding` shape.
 
 ```json
 {
   "version": "2.0.0",
   "uptime": 42,
-  "model": "llama-3.2",
-  "contextSize": 131072,
-  "queued": 3,
-  "inProgress": 1,
-  "completed": 150,
-  "failed": 2,
-  "callbackPending": 0,
+  "generative": {
+    "model": "llama-3.2",
+    "contextSize": 131072,
+    "queued": 3,
+    "inProgress": 1,
+    "completed": 150,
+    "failed": 2,
+    "callbackPending": 0
+  },
   "embedding": {
     "model": "Qwen3-Embedding-4B-Q4_K_M.gguf",
     "contextSize": 8192,
@@ -230,7 +232,9 @@ Returns queue counts and server uptime. The `embedding` block is present only wh
 ```typescript
 import { z } from 'zod';
 
-const QueueCounts = z.object({
+const ModelQueueSummary = z.object({
+  model: z.string().optional(),
+  contextSize: z.number().int().optional(),
   queued: z.number().int(),
   inProgress: z.number().int(),
   completed: z.number().int(),
@@ -238,15 +242,11 @@ const QueueCounts = z.object({
   callbackPending: z.number().int()
 });
 
-const StatusResponse = QueueCounts.extend({
+const StatusResponse = z.object({
   version: z.string(),
   uptime: z.number(),
-  model: z.string().nullable(),
-  contextSize: z.number().int().nullable(),
-  embedding: QueueCounts.extend({
-    model: z.string().optional(),
-    contextSize: z.number().int().optional()
-  }).optional()
+  generative: ModelQueueSummary,
+  embedding: ModelQueueSummary.optional()
 });
 type StatusResponse = z.infer<typeof StatusResponse>;
 ```

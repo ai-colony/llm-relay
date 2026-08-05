@@ -32,22 +32,22 @@ describe('GET /status', () => {
     );
   });
 
-  it('returns queue metrics, uptime, model name and context size', async () => {
+  it('returns queue metrics, uptime, model name and context size under generative', async () => {
     vi.mocked(getGenerativeModelInfo).mockResolvedValue({ model: 'test-model', contextSize: 32_768 });
 
     const response = await status.request('/');
     expect(response.status).toBe(200);
     const body = await readJson(response);
-    expect(body.queued).toBe(2);
-    expect(body.inProgress).toBe(1);
-    expect(body.completed).toBe(10);
-    expect(body.failed).toBe(0);
-    expect(body.callbackPending).toBe(1);
+    expect(body.generative.queued).toBe(2);
+    expect(body.generative.inProgress).toBe(1);
+    expect(body.generative.completed).toBe(10);
+    expect(body.generative.failed).toBe(0);
+    expect(body.generative.callbackPending).toBe(1);
     expect(body).toHaveProperty('version');
     expect(body).toHaveProperty('uptime');
     expect(typeof body.uptime).toBe('number');
-    expect(body.model).toBe('test-model');
-    expect(body.contextSize).toBe(32_768);
+    expect(body.generative.model).toBe('test-model');
+    expect(body.generative.contextSize).toBe(32_768);
   });
 
   it('returns model and contextSize as undefined when upstream is unreachable', async () => {
@@ -56,9 +56,9 @@ describe('GET /status', () => {
     const response = await status.request('/');
     expect(response.status).toBe(200);
     const body = await readJson(response);
-    expect(body.model).toBeUndefined();
-    expect(body.contextSize).toBeUndefined();
-    expect(body.queued).toBe(2);
+    expect(body.generative.model).toBeUndefined();
+    expect(body.generative.contextSize).toBeUndefined();
+    expect(body.generative.queued).toBe(2);
   });
 
   describe('with no embedding backend configured', () => {
@@ -67,6 +67,7 @@ describe('GET /status', () => {
 
       const response = await status.request('/');
       const body = await readJson(response);
+      expect(body).toHaveProperty('generative');
       expect(body).not.toHaveProperty('embedding');
       expect(getEmbeddingStatusCounts).not.toHaveBeenCalled();
     });
@@ -86,7 +87,7 @@ describe('GET /status', () => {
       expect(body.embedding.queued).toBe(5);
       expect(body.embedding.completed).toBe(3);
       // The prompt counts stay in their own namespace.
-      expect(body.queued).toBe(2);
+      expect(body.generative.queued).toBe(2);
     });
 
     it('still returns 200 with counts when the embedding upstream is unreachable', async () => {
