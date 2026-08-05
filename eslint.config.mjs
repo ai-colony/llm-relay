@@ -61,7 +61,11 @@ export default [
       ],
       'no-shadow': 'off',
       '@typescript-eslint/no-shadow': 'error',
-      '@typescript-eslint/method-signature-style': ['error', 'property']
+      '@typescript-eslint/method-signature-style': ['error', 'property'],
+      // These perform a network probe/delivery (a side effect) and return whether it succeeded —
+      // verb-first names in line with the codebase's checkDatabase/checkGenerative/checkEmbedding
+      // convention read better than forcing an is/has-style predicate name here.
+      'unicorn/consistent-boolean-name': ['error', { ignore: ['^checkCallbackAvailability$', '^deliverJobCallback$'] }]
     }
   },
   {
