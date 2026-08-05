@@ -1,4 +1,4 @@
-vi.mock('../../src/lib/openAI', () => ({
+vi.mock('../../src/lib/generative', () => ({
   streamChatCompletion: vi.fn()
 }));
 
@@ -8,7 +8,7 @@ vi.mock('../../src/lib/logger', async () => {
 });
 
 import { completions } from '../../src/hono/chat/completions';
-import { streamChatCompletion } from '../../src/lib/openAI';
+import { streamChatCompletion } from '../../src/lib/generative';
 import { postJson as post } from '../helpers/mocks';
 
 const validMessages = [{ role: 'user', content: 'Hello' }];

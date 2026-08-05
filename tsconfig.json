@@ -28,7 +28,9 @@
       "@db": ["./src/db"],
       "@db/*": ["./src/db/*"],
       "@prompt": ["./src/prompt"],
-      "@prompt/*": ["./src/prompt/*"]
+      "@prompt/*": ["./src/prompt/*"],
+      "@embedding": ["./src/embedding"],
+      "@embedding/*": ["./src/embedding/*"]
     }
   },
   "include": ["./src"],

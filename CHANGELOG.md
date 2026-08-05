@@ -7,7 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Optional embedding backend.** A second OpenAI-compatible upstream can now be configured with `EMBEDDING_URL` / `EMBEDDING_MODEL` / `EMBEDDING_KEY`, typically a separate llama.cpp instance serving an embedding model on its own port. Leave `EMBEDDING_URL` empty and the relay behaves exactly as before: `/health` reports only `db` + `generative`, `/status` and `/metrics` omit the embedding block, and every `/embedding/*` route answers `503`.
+  - New `embeddings` table with its own `(clientName, requestId)` unique index, so embedding jobs and prompts never share a key namespace. Vectors are stored as one contiguous little-endian **float32 blob** — embedding backends emit float32 and pgvector's `vector` type is float32, so a JSON array would only have stored padding, at roughly 5× the size.
+  - `POST /embedding/add`, `GET /embedding/get`, `GET /embedding/list`, `DELETE /embedding/cancel`, `DELETE /embedding/purge` — same semantics, status codes and retry/backoff state machine as their `/prompt` counterparts, including HMAC-signed callback delivery.
+  - `POST /embedding/run` embeds synchronously and returns the vectors inline, bypassing the queue (the embedding analogue of `/chat/completions`).
+  - `input` accepts a single string or an array to embed as a batch; results are index-aligned.
+  - `encodingFormat` selects the wire format per request. `float` (the default) returns `number[][]`, which is byte-identical to pgvector's text input and needs no client-side decoding; `base64` returns one base64 float32 string per vector, roughly 4× smaller. `GET /embedding/get` accepts it as a query parameter to re-encode on the way out.
+  - Embedding jobs are claimed `WORKER_CONCURRENCY` at a time but executed **strictly one at a time**, since embedding backends typically run with `--parallel 1`.
+  - Callback delivery, HMAC signing, retry backoff and transient-error classification moved from `prompt/service.ts` into a shared `src/lib/jobs.ts`, so a future third queue is additive.
+
+### BREAKING
+
+Existing `.env` files, compose files and deployment manifests **must** be updated in lockstep. The old names are no longer read, and the failure is silent — `GENERATIVE_URL` simply falls back to its default.
+
+| Old                              | New                                            |
+| -------------------------------- | ---------------------------------------------- |
+| `OPENAI_URL`                     | `GENERATIVE_URL`                               |
+| `OPENAI_MODEL`                   | `GENERATIVE_MODEL`                             |
+| `OPENAI_KEY`                     | `GENERATIVE_KEY`                               |
+| `OPENAI_TIMEOUT`                 | `UPSTREAM_TIMEOUT` (now governs both backends) |
+| `OPENAI_MAX_RETRY_COUNT`         | `UPSTREAM_MAX_RETRY_COUNT` (both)              |
+| `OPENAI_MODEL_CACHE_TTL_SECONDS` | `UPSTREAM_MODEL_CACHE_TTL_SECONDS` (both)      |
+
+`GET /health` renames the `checks.openai` key to `checks.generative`.
+
+Prometheus metrics are renamed to match. **Dashboards, recording rules and alert rules must be updated**, and historical series will not be continuous across the upgrade — Prometheus treats a renamed metric as a new one.
+
+| Old metric                             | New metric                                 |
+| -------------------------------------- | ------------------------------------------ |
+| `openai_requests_total`                | `generative_requests_total`                |
+| `openai_request_duration_seconds`      | `generative_request_duration_seconds`      |
+| `openai_chat_requests_total`           | `generative_chat_requests_total`           |
+| `openai_chat_request_duration_seconds` | `generative_chat_request_duration_seconds` |
+| `llm_relay_callbacks_pending`          | `llm_relay_prompt_callbacks_pending`       |
+
+The last row disambiguates it from the new `llm_relay_embedding_callbacks_pending`. `http_requests_total`, `http_request_duration_seconds`, `callback_deliveries_total`, `llm_relay_prompts_*` and `llm_relay_uptime_seconds` are unchanged — they were already backend-agnostic.
+
 ### Fixed
+
+- **`npm run drizzle:generate` crashed** with `TypeError: drizzle_orm_sqlite_core.SQLiteSyncDialect is not a constructor`. A caret range containing a prerelease matches _any_ prerelease sharing the same `1.0.0` tuple, so `^1.0.0-beta.22` also matched drizzle's per-branch snapshot builds (`1.0.0-rc.4-<commit>`, published one package at a time under tags like `sqlite-update` and `postgres`). Each package independently resolved to its own highest snapshot — `ca0f029` for drizzle-kit, `de6c356` for drizzle-orm — and the two unrelated builds are not wire-compatible. Both are now pinned exactly to `1.0.0-rc.4`, the coordinated release both packages published together under the `rc` dist-tag. Keep them exact and in lockstep: drizzle-kit imports drizzle-orm from the consumer's `node_modules` but declares no `peerDependencies` on it, so a mismatched pair fails at `generate` time rather than at install.
 
 - **Docker images were published with no checks**: `ci-publish-docker.yaml` built, pushed to ghcr.io, and cut a GitHub release without running lint, typecheck, or tests — `ci-dev.yaml` ignored `main` entirely. The publish workflow is now split into `detect` → `checks` → `build`, where `checks` reuses `ci-dev.yaml` via `workflow_call`, so a release cannot ship without passing the same gate contributors run locally.
 - **Coverage thresholds were never enforced**: the 60% thresholds in `vitest.config.ts` (and the claim in the README/CONTRIBUTING) had no effect because CI ran `npm run test`, not `test:coverage`. CI now runs `test:coverage`.

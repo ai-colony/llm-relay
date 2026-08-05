@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 
 import { createAuthMiddleware } from './auth';
 import { chat } from './chat';
+import { embedding } from './embedding';
 import { jsonError } from './errors';
 import { health } from './health';
 import { httpMetrics } from './httpMetrics';
@@ -33,9 +34,11 @@ export const app = new Hono()
   )
   .use('/prompt/*', auth)
   .use('/chat/*', auth)
+  .use('/embedding/*', auth)
   .route('/', openapi)
   .route('/health', health)
   .route('/metrics', metrics)
   .route('/status', status)
   .route('/prompt', prompt)
-  .route('/chat', chat);
+  .route('/chat', chat)
+  .route('/embedding', embedding);

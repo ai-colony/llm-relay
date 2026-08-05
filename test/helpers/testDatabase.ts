@@ -13,6 +13,9 @@ export const testDatabaseClient = drizzle({ client: sqlite });
 // test schema — columns and indexes alike — cannot drift from the real one.
 migrate(testDatabaseClient, { migrationsFolder: './drizzle' });
 
-export const clearDatabase = () => sqlite.exec('DELETE FROM prompts');
+export const clearDatabase = () => {
+  sqlite.exec('DELETE FROM prompts');
+  sqlite.exec('DELETE FROM embeddings');
+};
 
 export { schema as testDbSchema } from '../../src/db/schema';

@@ -24,7 +24,13 @@ const VALIDATED_PATHS = [
   '/prompt/list',
   '/prompt/cancel',
   '/prompt/purge',
-  '/chat/completions'
+  '/chat/completions',
+  '/embedding/add',
+  '/embedding/run',
+  '/embedding/get',
+  '/embedding/list',
+  '/embedding/cancel',
+  '/embedding/purge'
 ];
 
 describe('GET /openapi.json', () => {
@@ -51,7 +57,8 @@ describe('GET /openapi.json', () => {
 
     for (const [path, operations] of Object.entries(spec.paths))
       for (const operation of Object.values(operations)) {
-        const isGuarded = path.startsWith('/prompt/') || path.startsWith('/chat/');
+        // Must stay in step with the .use(...) prefixes in src/hono/index.ts.
+        const isGuarded = path.startsWith('/prompt/') || path.startsWith('/chat/') || path.startsWith('/embedding/');
         // Public routes carry an explicit empty list rather than omitting the key.
         expect(operation.security).toEqual(isGuarded ? [{ bearerAuth: [] }] : []);
         // Guarded routes can always answer 401, and 500 via the global onError handler.
