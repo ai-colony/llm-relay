@@ -477,7 +477,18 @@ const spec = {
           reference('GetPromptResponseFailed'),
           reference('GetPromptResponseCompleted')
         ],
-        discriminator: { propertyName: 'status' }
+        // Explicit mapping because the implicit convention (value === schema name) doesn't hold:
+        // `status` values are plain job-state strings, not the response schema names.
+        discriminator: {
+          propertyName: 'status',
+          mapping: {
+            queued: '#/components/schemas/GetPromptResponsePending',
+            in_progress: '#/components/schemas/GetPromptResponsePending',
+            failed_retry: '#/components/schemas/GetPromptResponsePending',
+            failed: '#/components/schemas/GetPromptResponseFailed',
+            completed: '#/components/schemas/GetPromptResponseCompleted'
+          }
+        }
       },
       PromptListItem: {
         type: 'object',
@@ -543,7 +554,18 @@ const spec = {
           reference('GetEmbeddingResponseFailed'),
           reference('GetEmbeddingResponseCompleted')
         ],
-        discriminator: { propertyName: 'status' }
+        // Explicit mapping because the implicit convention (value === schema name) doesn't hold:
+        // `status` values are plain job-state strings, not the response schema names.
+        discriminator: {
+          propertyName: 'status',
+          mapping: {
+            queued: '#/components/schemas/GetEmbeddingResponsePending',
+            in_progress: '#/components/schemas/GetEmbeddingResponsePending',
+            failed_retry: '#/components/schemas/GetEmbeddingResponsePending',
+            failed: '#/components/schemas/GetEmbeddingResponseFailed',
+            completed: '#/components/schemas/GetEmbeddingResponseCompleted'
+          }
+        }
       },
       EmbeddingListItem: {
         type: 'object',
