@@ -6,11 +6,12 @@ function makeOpenAIMock() {
   };
 }
 
-function makeConfigMock(model: string, modelCacheTtlMs = 60_000, contextSize?: number) {
+function makeConfigMock(model: string, modelCacheTtlMs = 60_000, contextSize?: number, reasoningEffort = 'none') {
   return {
     config: {
       generative: { url: 'http://test/v1', model, key: 'k', contextSize },
       embedding: undefined,
+      reasoning: { effort: reasoningEffort },
       upstream: { timeout: 5000, maxRetryCount: 10, modelCacheTtlMs },
       log: { level: 'silent' },
       http: { port: 3000 },
@@ -75,6 +76,16 @@ describe('executeGenerativePrompt', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  // The worker path burns thinking tokens on every queued document, so it must carry the same
+  // setting as the streaming one — they share reasoningParameters() precisely so they cannot drift.
+  it('asks the backend not to reason by default', async () => {
+    mockCompletionsCreate.mockResolvedValue(makeStream([{ content: 'answer' }]));
+
+    await executeGenerativePrompt({ system: undefined, user: 'hello' }, 0.7);
+
+    expect(mockCompletionsCreate.mock.calls[0]?.[0]).toMatchObject({ reasoning_effort: 'none' });
   });
 
   it('returns reasoning and response from a mixed stream', async () => {
@@ -168,6 +179,41 @@ describe('streamChatCompletion', () => {
     const result: unknown[] = await Array.fromAsync(streamChatCompletion([{ role: 'user', content: 'hi' }]));
 
     expect(result).toEqual(chunks);
+  });
+
+  // Thinking off is the default because a reasoning model can loop on one passage until its output
+  // budget is gone, returning finish_reason "length" with no content. A llama.cpp backend closes
+  // that off with server flags; a hosted one has no flags, so the request is the only place to.
+  it('asks the backend not to reason by default', async () => {
+    mockCompletionsCreate.mockResolvedValue((async function* () {})());
+
+    await Array.fromAsync(streamChatCompletion([{ role: 'user', content: 'hi' }]));
+
+    expect(mockCompletionsCreate.mock.calls[0]?.[0]).toMatchObject({ reasoning_effort: 'none' });
+  });
+
+  it('passes an explicitly configured effort level through', async () => {
+    vi.resetModules();
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model', 60_000, undefined, 'high'));
+    const { streamChatCompletion: streamWithHigh } = await import('../../src/lib/generative');
+    mockCompletionsCreate.mockResolvedValue((async function* () {})());
+
+    await Array.fromAsync(streamWithHigh([{ role: 'user', content: 'hi' }]));
+
+    expect(mockCompletionsCreate.mock.calls[0]?.[0]).toMatchObject({ reasoning_effort: 'high' });
+  });
+
+  // The escape hatch for a backend that decides for itself — a llama.cpp server already configured
+  // with --reasoning, or one that rejects the field outright.
+  it('omits the parameter entirely when the effort is "default"', async () => {
+    vi.resetModules();
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model', 60_000, undefined, 'default'));
+    const { streamChatCompletion: streamWithDefault } = await import('../../src/lib/generative');
+    mockCompletionsCreate.mockResolvedValue((async function* () {})());
+
+    await Array.fromAsync(streamWithDefault([{ role: 'user', content: 'hi' }]));
+
+    expect(mockCompletionsCreate.mock.calls[0]?.[0]).not.toHaveProperty('reasoning_effort');
   });
 
   it('forwards the AbortSignal to the OpenAI SDK', async () => {

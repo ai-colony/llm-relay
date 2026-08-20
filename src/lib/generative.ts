@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { ChatCompletionChunk, ChatCompletionMessageParam } from 'openai/resources';
+import type { ChatCompletionChunk, ChatCompletionMessageParam, ReasoningEffort } from 'openai/resources';
 
 import type { RelayMessage, RelayTool } from './chatSchemas';
 import { config } from './config';
@@ -30,6 +30,11 @@ const resolver = createModelResolver('generative', () => config.generative);
 export const getGenerativeModelInfo = resolver.getModelInfo;
 export const checkGenerative = resolver.check;
 
+// Spread into every completion request. 'default' means "say nothing and let the backend decide";
+// any other value is sent verbatim. See config.reasoning.effort for why the default is 'none'.
+const reasoningParameters = (): { reasoning_effort?: ReasoningEffort } =>
+  config.reasoning.effort === 'default' ? {} : { reasoning_effort: config.reasoning.effort };
+
 const resolveModel = async (): Promise<string> => {
   const info = await getGenerativeModelInfo();
   return info.model;
@@ -48,6 +53,7 @@ export const streamChatCompletion = async function* (
       messages: messages as unknown as ChatCompletionMessageParam[],
       tools,
       ...(temperature !== undefined && { temperature }),
+      ...reasoningParameters(),
       stream: true
     },
     { signal }
@@ -89,6 +95,7 @@ export const executeGenerativePrompt = async (
         ]
       : [{ role: 'user', content: prompt.user }],
     temperature,
+    ...reasoningParameters(),
     stream: true
   })) as unknown as AsyncIterable<RelayChunk>;
 

@@ -61,6 +61,10 @@ The last row disambiguates it from the new `llm_relay_embedding_callbacks_pendin
 
 ### Changed
 
+- **Thinking is off by default** (`GENERATIVE_REASONING_EFFORT`, default `none`). Every completion the relay sends — both `POST /chat/completions` and the prompt worker — now carries `reasoning_effort`, and unless configured otherwise it asks the backend not to reason. Set `GENERATIVE_REASONING_EFFORT=default` to say nothing and leave the choice to the backend, which is what a llama.cpp deployment that already configures `--reasoning` on the server wants; `minimal`, `low`, `medium` and `high` are also accepted and passed through. An invalid value fails at startup rather than reaching the upstream as a mid-stream 400.
+
+  A thinking model can degenerate into repeating one passage verbatim until its output budget is exhausted, returning `finish_reason: "length"` with no content at all — measured on `qwen3.6-35b-a3b` at roughly 1 turn in 12, burning ~113,000 characters of reasoning to produce nothing, at temperature 0.3 and 0.6 alike. A llama.cpp backend is normally protected by its own server flags (`--reasoning`, `--top-p`, `--presence-penalty`); a hosted backend has no such flags, so the request is the only place left to say it. That makes it a failure mode to close by default rather than an option to opt out of.
+
 - Dev server runs on `tsx watch` instead of nodemon; `nodemon` dropped from devDependencies (there was no nodemon config — tsx has watch built in).
 - ESLint now enforces `@typescript-eslint/await-thenable` on `src`, which surfaced two `await`s on non-promises: the startup `migrate()` call and `checkDatabase()` in `GET /health` are both synchronous, so awaiting them only added a microtask hop. `GET /health` no longer wraps the two checks in a `Promise.all` that could never overlap.
 - `drizzle.config.ts` declares `out: './drizzle'` explicitly instead of relying on the default, since the Dockerfile and the startup migration both depend on that exact path.

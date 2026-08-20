@@ -64,6 +64,22 @@ export const config = {
         1
       ) * 1000
   },
+  // Reasoning/thinking control for the generative upstream. Deliberately not part of the
+  // `generative` block above: that is typed as UpstreamConfig, which `embedding` shares, and
+  // reasoning is meaningless for an embedding backend.
+  //
+  // Unset means 'none' — thinking off. A llama.cpp deployment says this with server flags
+  // (--reasoning off), but a hosted backend has none, so this request parameter is the only place
+  // to say it; and a reasoning loop that repeats the same passage until the output budget runs out
+  // is a failure mode, not something a deployment should have to opt out of. 'default' omits the
+  // parameter entirely and leaves the decision to the backend — what a llama.cpp deployment that
+  // already configures --reasoning itself wants.
+  reasoning: {
+    effort: envVar
+      .get('GENERATIVE_REASONING_EFFORT')
+      .default('none')
+      .asEnum(['none', 'minimal', 'low', 'medium', 'high', 'default'])
+  },
   worker: {
     concurrency: Math.min(envVar.get('WORKER_CONCURRENCY').default(1).asIntPositive(), 16)
   },
