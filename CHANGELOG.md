@@ -5,10 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2026-08-20
 
 ### Added
 
+- **`workerConcurrency` in `GET /status`**: the response now reports the configured `WORKER_CONCURRENCY` alongside the existing `generative`/`embedding` blocks, so it's visible without cross-checking the deployment's environment.
+- **`GENERATIVE_CONTEXTSIZE` / `EMBEDDING_CONTEXTSIZE`**: manual fallback context sizes for each upstream, reported via `GET /status`. Only used when that upstream's `/models` response carries no context-size field of its own (e.g. hosted providers like Scaleway, unlike llama.cpp's `meta.n_ctx` extension) — a live value from `/models` always takes priority over the configured one.
 - **Optional embedding backend.** A second OpenAI-compatible upstream can now be configured with `EMBEDDING_URL` / `EMBEDDING_MODEL` / `EMBEDDING_KEY`, typically a separate llama.cpp instance serving an embedding model on its own port. Leave `EMBEDDING_URL` empty and the relay behaves exactly as before: `/health` reports only `db` + `generative`, `/status` and `/metrics` omit the embedding block, and every `/embedding/*` route answers `503`.
   - New `embeddings` table with its own `(clientName, requestId)` unique index, so embedding jobs and prompts never share a key namespace. Vectors are stored as one contiguous little-endian **float32 blob** — embedding backends emit float32 and pgvector's `vector` type is float32, so a JSON array would only have stored padding, at roughly 5× the size.
   - `POST /embedding/add`, `GET /embedding/get`, `GET /embedding/list`, `DELETE /embedding/cancel`, `DELETE /embedding/purge` — same semantics, status codes and retry/backoff state machine as their `/prompt` counterparts, including HMAC-signed callback delivery.
@@ -242,7 +244,8 @@ The last row disambiguates it from the new `llm_relay_embedding_callbacks_pendin
 
 - Initial release.
 
-[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/ai-colony/llm-relay/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/ai-colony/llm-relay/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/ai-colony/llm-relay/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/ai-colony/llm-relay/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/ai-colony/llm-relay/compare/v1.7.0...v1.8.0
