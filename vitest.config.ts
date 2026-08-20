@@ -10,7 +10,8 @@ export default defineConfig({
     alias: {
       '@lib': path.resolve('src/lib'),
       '@db': path.resolve('src/db'),
-      '@prompt': path.resolve('src/prompt')
+      '@prompt': path.resolve('src/prompt'),
+      '@embedding': path.resolve('src/embedding')
     }
   },
   test: {

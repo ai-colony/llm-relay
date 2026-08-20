@@ -1,10 +1,18 @@
-import { PROMPT_STATUSES } from '@db/schema';
+import { ENCODING_FORMATS, PROMPT_STATUSES } from '@db/schema';
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { z } from 'zod';
 
 import { version } from '../../package.json';
 import { RelayChatRequestSchema } from './chat/schemas';
+import {
+  AddEmbeddingBodySchema,
+  EmbeddingKeyQuerySchema,
+  GetEmbeddingQuerySchema,
+  ListQuerySchema as EmbeddingListQuerySchema,
+  PurgeQuerySchema as EmbeddingPurgeQuerySchema,
+  RunEmbeddingBodySchema
+} from './embedding/schemas';
 import { AddPromptBodySchema, ListQuerySchema, PromptKeyQuerySchema, PurgeQuerySchema } from './prompt/schemas';
 
 type JsonSchema = Record<string, unknown>;
@@ -49,8 +57,9 @@ const validationErrorResponse = {
 const unauthorizedResponse = errorResponse('Missing or invalid Bearer token (only when API_KEY is configured)');
 const serverErrorResponse = errorResponse('Unhandled server error');
 
-// `secured` marks the routes behind the auth middleware (/prompt/*, /chat/*); `unauthenticated` is
-// the explicit "no auth required" form, clearer than omitting the key on the always-open routes.
+// `secured` marks the routes behind the auth middleware (/prompt/*, /chat/*, /embedding/*);
+// `unauthenticated` is the explicit "no auth required" form, clearer than omitting the key on the
+// always-open routes.
 const secured = { security: [{ bearerAuth: [] }] };
 const unauthenticated = { security: [] };
 const authedResponses = { '401': unauthorizedResponse, '500': serverErrorResponse };
@@ -70,7 +79,8 @@ const spec = {
         operationId: 'getHealth',
         ...unauthenticated,
         summary: 'Health check',
-        description: 'Returns 503 if either the SQLite database or the upstream OpenAI endpoint is unavailable.',
+        description:
+          'Returns 503 if the SQLite database or the generative upstream is unavailable. The embedding check is present — and counts toward the verdict — only when an embedding backend is configured.',
         responses: {
           '200': { description: 'All systems healthy', content: jsonContent(reference('HealthResponse')) },
           '503': { description: 'One or more systems unhealthy', content: jsonContent(reference('HealthResponse')) }
@@ -208,6 +218,106 @@ const spec = {
           ...authedResponses
         }
       }
+    },
+    '/embedding/add': {
+      post: {
+        operationId: 'addEmbedding',
+        summary: 'Queue a new embedding job',
+        description:
+          'Adds an embedding job to the queue identified by (clientName, requestId). `input` is one string or an array to embed as a batch. Set overwrite=true to replace an existing non-in-progress job. Every /embedding route answers 503 when no embedding backend is configured.',
+        ...secured,
+        requestBody: { required: true, content: jsonContent(reference('AddEmbeddingBody')) },
+        responses: {
+          '201': { description: 'Embedding queued', content: jsonContent(reference('AddPromptResponse')) },
+          '400': validationErrorResponse,
+          '409': errorResponse('Duplicate (clientName, requestId) or in-progress overwrite attempt'),
+          '503': errorResponse('Embedding backend not configured, or callbackUrl failed the probe'),
+          ...authedResponses
+        }
+      }
+    },
+    '/embedding/run': {
+      post: {
+        operationId: 'runEmbedding',
+        summary: 'Embed synchronously',
+        description:
+          'Embeds the input and returns the vectors in the response, bypassing the queue. Use for interactive, low-latency callers; use /embedding/add when you want durability and callback delivery.',
+        ...secured,
+        requestBody: { required: true, content: jsonContent(reference('RunEmbeddingBody')) },
+        responses: {
+          '200': { description: 'Vectors computed', content: jsonContent(reference('RunEmbeddingResponse')) },
+          '400': validationErrorResponse,
+          '502': errorResponse('The embedding upstream rejected or failed the request'),
+          '503': errorResponse('Embedding backend not configured'),
+          ...authedResponses
+        }
+      }
+    },
+    '/embedding/get': {
+      get: {
+        operationId: 'getEmbedding',
+        summary: 'Get embedding status and vectors',
+        description:
+          'Pass encodingFormat to re-encode the stored vectors on the way out; without it the format the job was queued with is used.',
+        ...secured,
+        parameters: queryParameters(GetEmbeddingQuerySchema),
+        responses: {
+          '200': { description: 'Embedding found', content: jsonContent(reference('GetEmbeddingResponse')) },
+          '400': validationErrorResponse,
+          '404': errorResponse('Embedding not found'),
+          '503': errorResponse('Embedding backend not configured'),
+          ...authedResponses
+        }
+      }
+    },
+    '/embedding/list': {
+      get: {
+        operationId: 'listEmbeddings',
+        summary: 'List embedding jobs for a client',
+        description:
+          'Returns up to 500 jobs ordered by creation time, without their vectors. Filter by status to narrow results.',
+        ...secured,
+        parameters: queryParameters(EmbeddingListQuerySchema),
+        responses: {
+          '200': { description: 'OK', content: jsonContent({ type: 'array', items: reference('EmbeddingListItem') }) },
+          '400': validationErrorResponse,
+          '503': errorResponse('Embedding backend not configured'),
+          ...authedResponses
+        }
+      }
+    },
+    '/embedding/cancel': {
+      delete: {
+        operationId: 'cancelEmbedding',
+        summary: 'Cancel and delete an embedding job',
+        description: 'Deletes the record. Only allowed for queued, failed, and failed_retry statuses.',
+        ...secured,
+        parameters: queryParameters(EmbeddingKeyQuerySchema),
+        responses: {
+          '200': { description: 'Cancelled', content: jsonContent(reference('SuccessResponse')) },
+          '400': validationErrorResponse,
+          '404': errorResponse('Embedding not found'),
+          '409': errorResponse('Cannot cancel – embedding is in_progress or completed'),
+          '503': errorResponse('Embedding backend not configured'),
+          ...authedResponses
+        }
+      }
+    },
+    '/embedding/purge': {
+      delete: {
+        operationId: 'purgeEmbeddings',
+        summary: 'Purge old completed and failed embedding jobs',
+        description:
+          'Deletes completed and failed jobs older than the given number of days, optionally scoped to a single client. Worth scheduling: a stored vector is roughly 10 KB at 2560 dimensions.',
+        ...secured,
+        parameters: queryParameters(EmbeddingPurgeQuerySchema),
+        responses: {
+          '200': { description: 'Purge complete', content: jsonContent(reference('PurgeResponse')) },
+          '400': validationErrorResponse,
+          '503': errorResponse('Embedding backend not configured'),
+          ...authedResponses
+        }
+      }
     }
   },
   components: {
@@ -222,6 +332,8 @@ const spec = {
       // --- Generated from the Zod schemas the routes validate with -----------------------------
       AddPromptBody: fromZod(AddPromptBodySchema),
       ChatCompletionsBody: fromZod(RelayChatRequestSchema),
+      AddEmbeddingBody: fromZod(AddEmbeddingBodySchema),
+      RunEmbeddingBody: fromZod(RunEmbeddingBodySchema),
 
       // --- Hand-written response envelopes ----------------------------------------------------
       HealthCheck: {
@@ -238,8 +350,15 @@ const spec = {
           success: { type: 'boolean' },
           checks: {
             type: 'object',
-            properties: { db: reference('HealthCheck'), openai: reference('HealthCheck') },
-            required: ['db', 'openai']
+            properties: {
+              db: reference('HealthCheck'),
+              generative: reference('HealthCheck'),
+              embedding: {
+                allOf: [reference('HealthCheck')],
+                description: 'Present only when an embedding backend is configured'
+              }
+            },
+            required: ['db', 'generative']
           }
         },
         required: ['success', 'checks']
@@ -249,18 +368,27 @@ const spec = {
         properties: {
           version: { type: 'string' },
           uptime: { type: 'integer', description: 'Process uptime in seconds' },
+          workerConcurrency: { type: 'integer', description: 'Configured WORKER_CONCURRENCY' },
+          generative: reference('ModelQueueSummary'),
+          embedding: {
+            ...reference('ModelQueueSummary'),
+            description: 'Present only when an embedding backend is configured'
+          }
+        },
+        required: ['version', 'uptime', 'workerConcurrency', 'generative']
+      },
+      ModelQueueSummary: {
+        type: 'object',
+        properties: {
           model: { type: 'string', description: 'Active model name; absent when the upstream is unreachable' },
-          contextSize: {
-            type: 'integer',
-            description: 'Model context window size in tokens; absent when not reported by the upstream'
-          },
+          contextSize: { type: 'integer', description: 'Absent when not reported by the upstream' },
           queued: { type: 'integer' },
           inProgress: { type: 'integer' },
           completed: { type: 'integer' },
           failed: { type: 'integer' },
           callbackPending: { type: 'integer' }
         },
-        required: ['version', 'uptime', 'queued', 'inProgress', 'completed', 'failed', 'callbackPending']
+        required: ['queued', 'inProgress', 'completed', 'failed', 'callbackPending']
       },
       AddPromptResponse: {
         type: 'object',
@@ -350,7 +478,18 @@ const spec = {
           reference('GetPromptResponseFailed'),
           reference('GetPromptResponseCompleted')
         ],
-        discriminator: { propertyName: 'status' }
+        // Explicit mapping because the implicit convention (value === schema name) doesn't hold:
+        // `status` values are plain job-state strings, not the response schema names.
+        discriminator: {
+          propertyName: 'status',
+          mapping: {
+            queued: '#/components/schemas/GetPromptResponsePending',
+            in_progress: '#/components/schemas/GetPromptResponsePending',
+            failed_retry: '#/components/schemas/GetPromptResponsePending',
+            failed: '#/components/schemas/GetPromptResponseFailed',
+            completed: '#/components/schemas/GetPromptResponseCompleted'
+          }
+        }
       },
       PromptListItem: {
         type: 'object',
@@ -362,6 +501,85 @@ const spec = {
           completedAt: { type: ['string', 'null'], format: 'date-time' }
         },
         required: ['priority', 'requestId', 'status', 'createdAt', 'completedAt']
+      },
+
+      // --- Embedding ---------------------------------------------------------------------------
+      EncodingFormat: { type: 'string', enum: [...ENCODING_FORMATS] },
+      EmbeddingVectors: {
+        description:
+          'One entry per input, in the same order. With encodingFormat "float" each entry is an array of numbers — the exact text form pgvector accepts. With "base64" each entry is a base64-encoded little-endian float32 buffer, roughly 4x smaller on the wire.',
+        oneOf: [
+          { type: 'array', items: { type: 'array', items: { type: 'number' } } },
+          { type: 'array', items: { type: 'string' } }
+        ]
+      },
+      RunEmbeddingResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', const: true },
+          model: { type: 'string' },
+          dimensions: { type: 'integer' },
+          encodingFormat: reference('EncodingFormat'),
+          embedding: reference('EmbeddingVectors')
+        },
+        required: ['success', 'model', 'dimensions', 'encodingFormat', 'embedding']
+      },
+      GetEmbeddingResponsePending: {
+        type: 'object',
+        properties: { status: { type: 'string', enum: ['queued', 'in_progress', 'failed_retry'] } },
+        required: ['status']
+      },
+      GetEmbeddingResponseFailed: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', const: 'failed' },
+          statusError: { type: ['string', 'null'] }
+        },
+        required: ['status', 'statusError']
+      },
+      GetEmbeddingResponseCompleted: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', const: 'completed' },
+          model: { type: ['string', 'null'] },
+          dimensions: { type: ['integer', 'null'] },
+          durationMs: { type: ['integer', 'null'] },
+          encodingFormat: reference('EncodingFormat'),
+          embedding: reference('EmbeddingVectors')
+        },
+        required: ['status', 'model', 'dimensions', 'durationMs', 'encodingFormat', 'embedding']
+      },
+      GetEmbeddingResponse: {
+        oneOf: [
+          reference('GetEmbeddingResponsePending'),
+          reference('GetEmbeddingResponseFailed'),
+          reference('GetEmbeddingResponseCompleted')
+        ],
+        // Explicit mapping because the implicit convention (value === schema name) doesn't hold:
+        // `status` values are plain job-state strings, not the response schema names.
+        discriminator: {
+          propertyName: 'status',
+          mapping: {
+            queued: '#/components/schemas/GetEmbeddingResponsePending',
+            in_progress: '#/components/schemas/GetEmbeddingResponsePending',
+            failed_retry: '#/components/schemas/GetEmbeddingResponsePending',
+            failed: '#/components/schemas/GetEmbeddingResponseFailed',
+            completed: '#/components/schemas/GetEmbeddingResponseCompleted'
+          }
+        }
+      },
+      EmbeddingListItem: {
+        type: 'object',
+        properties: {
+          priority: { type: 'integer', minimum: 0 },
+          requestId: { type: 'string' },
+          status: reference('PromptStatus'),
+          inputCount: { type: 'integer', description: 'Number of texts in the batch' },
+          dimensions: { type: ['integer', 'null'] },
+          createdAt: { type: 'string', format: 'date-time' },
+          completedAt: { type: ['string', 'null'], format: 'date-time' }
+        },
+        required: ['priority', 'requestId', 'status', 'inputCount', 'dimensions', 'createdAt', 'completedAt']
       }
     }
   }

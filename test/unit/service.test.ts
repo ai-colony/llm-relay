@@ -1,16 +1,42 @@
+// One shared, mutable config object: the @lib barrel mock and the real jobs module (pulled in via
+// importActual below) must observe the same reference, or a test that sets hmacSecret on one would
+// leave the other reading the default.
+const { testConfig } = vi.hoisted(() => ({
+  testConfig: {
+    generative: { url: 'http://test/v1', model: '', key: 'k' },
+    embedding: undefined,
+    upstream: { timeout: 5000, maxRetryCount: 10, modelCacheTtlMs: 60_000 },
+    worker: { concurrency: 1 },
+    callback: { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: '' }
+  } as {
+    generative: { url: string; model: string; key: string };
+    embedding: { url: string; model: string; key: string } | undefined;
+    upstream: { timeout: number; maxRetryCount: number; modelCacheTtlMs: number };
+    worker: { concurrency: number };
+    callback: { urlAllowlist: RegExp | undefined; retryTtlHours: number; hmacSecret: string };
+  }
+}));
+
+vi.mock('../../src/lib/config', () => ({ config: testConfig }));
+
+vi.mock('../../src/lib/logger', async () => {
+  const { makeLoggerMock } = await import('../helpers/mocks');
+  return { logger: makeLoggerMock() };
+});
+
 vi.mock('@lib', async () => {
   const { makeLoggerMock } = await import('../helpers/mocks');
+  // The retry/backoff, transient-error and callback-delivery helpers are pure logic that the tests
+  // below actually exercise — stubbing them out would make those assertions vacuous.
+  const jobs = await vi.importActual<typeof JobsModule>('../../src/lib/jobs');
   return {
-    executeOpenAIPrompt: vi.fn(),
+    ...jobs,
+    executeGenerativePrompt: vi.fn(),
     incCounter: vi.fn(),
     observeHistogram: vi.fn(),
     recordUpstreamMetrics: vi.fn(),
     logger: makeLoggerMock(),
-    config: {
-      openai: { maxRetryCount: 10 },
-      worker: { concurrency: 1 },
-      callback: { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: '' }
-    }
+    config: testConfig
   };
 });
 
@@ -26,8 +52,9 @@ vi.mock('../../src/prompt/repo', () => ({
 
 import { createHmac } from 'node:crypto';
 
-import { config, executeOpenAIPrompt } from '@lib';
+import { config, executeGenerativePrompt } from '@lib';
 
+import type * as JobsModule from '../../src/lib/jobs';
 import {
   findCallbackPendingPrompts,
   findQueuedPrompts,
@@ -81,7 +108,7 @@ describe('processQueuedPrompts', () => {
 
   it('marks the prompt completed on successful execution', async () => {
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
-    vi.mocked(executeOpenAIPrompt).mockResolvedValue(successfulResult);
+    vi.mocked(executeGenerativePrompt).mockResolvedValue(successfulResult);
 
     await processQueuedPrompts();
 
@@ -94,7 +121,7 @@ describe('processQueuedPrompts', () => {
 
   it('marks the prompt as failed_retry on a transient error', async () => {
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
+    vi.mocked(executeGenerativePrompt).mockRejectedValue(new Error('fetch failed'));
 
     await processQueuedPrompts();
 
@@ -103,7 +130,7 @@ describe('processQueuedPrompts', () => {
 
   it('retries a transient error that is still under the retry cap', async () => {
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 8 })]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('econnreset'));
+    vi.mocked(executeGenerativePrompt).mockRejectedValue(new Error('econnreset'));
 
     await processQueuedPrompts();
 
@@ -112,7 +139,7 @@ describe('processQueuedPrompts', () => {
 
   it('moves to permanently failed with max_retries_exceeded when the retry cap is reached', async () => {
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 9 })]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
+    vi.mocked(executeGenerativePrompt).mockRejectedValue(new Error('fetch failed'));
 
     await processQueuedPrompts();
 
@@ -121,7 +148,7 @@ describe('processQueuedPrompts', () => {
 
   it('marks the prompt as permanently failed for non-transient errors regardless of retry count', async () => {
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('model not found'));
+    vi.mocked(executeGenerativePrompt).mockRejectedValue(new Error('model not found'));
 
     await processQueuedPrompts();
 
@@ -130,7 +157,7 @@ describe('processQueuedPrompts', () => {
 
   it('converts a non-Error thrown value to a string for the failure message', async () => {
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue('plain string error');
+    vi.mocked(executeGenerativePrompt).mockRejectedValue('plain string error');
 
     await processQueuedPrompts();
 
@@ -140,7 +167,7 @@ describe('processQueuedPrompts', () => {
   it('treats AbortError as transient', async () => {
     const abortError = new DOMException('aborted', 'AbortError');
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 0 })]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue(abortError);
+    vi.mocked(executeGenerativePrompt).mockRejectedValue(abortError);
 
     await processQueuedPrompts();
 
@@ -151,7 +178,7 @@ describe('processQueuedPrompts', () => {
     'treats "%s" as a transient error',
     async (message) => {
       vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
-      vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error(message));
+      vi.mocked(executeGenerativePrompt).mockRejectedValue(new Error(message));
 
       await processQueuedPrompts();
 
@@ -163,7 +190,7 @@ describe('processQueuedPrompts', () => {
     const cause = new Error('fetch failed');
     const outer = new Error('wrapped', { cause });
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt()]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue(outer);
+    vi.mocked(executeGenerativePrompt).mockRejectedValue(outer);
 
     await processQueuedPrompts();
 
@@ -172,7 +199,7 @@ describe('processQueuedPrompts', () => {
 
   it('caps the retry backoff at 60 s for very large retry counts', async () => {
     vi.mocked(findQueuedPrompts).mockResolvedValue([makeQueuedPrompt({ retryCount: 8 })]);
-    vi.mocked(executeOpenAIPrompt).mockRejectedValue(new Error('fetch failed'));
+    vi.mocked(executeGenerativePrompt).mockRejectedValue(new Error('fetch failed'));
 
     const before = Date.now();
     await processQueuedPrompts();
@@ -189,7 +216,7 @@ describe('processQueuedPrompts', () => {
     const prompt1 = makeQueuedPrompt({ id: 1, requestId: 'req-1' });
     const prompt2 = makeQueuedPrompt({ id: 2, requestId: 'req-2' });
     vi.mocked(findQueuedPrompts).mockResolvedValue([prompt1, prompt2]);
-    vi.mocked(executeOpenAIPrompt).mockResolvedValue(successfulResult);
+    vi.mocked(executeGenerativePrompt).mockResolvedValue(successfulResult);
 
     await processQueuedPrompts();
 
@@ -203,7 +230,7 @@ describe('processQueuedPrompts', () => {
     const prompt1 = makeQueuedPrompt({ id: 1, requestId: 'req-1' });
     const prompt2 = makeQueuedPrompt({ id: 2, requestId: 'req-2' });
     vi.mocked(findQueuedPrompts).mockResolvedValue([prompt1, prompt2]);
-    vi.mocked(executeOpenAIPrompt)
+    vi.mocked(executeGenerativePrompt)
       .mockResolvedValueOnce(successfulResult)
       .mockRejectedValueOnce(new Error('model not found'));
 
@@ -218,6 +245,7 @@ describe('processCallbackPendingPrompts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    vi.mocked(config).callback = { urlAllowlist: undefined, retryTtlHours: 24, hmacSecret: '' };
   });
 
   it('does nothing when no callbacks are pending', async () => {

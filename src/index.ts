@@ -1,4 +1,6 @@
 import { closeDatabase, database } from '@db';
+import { getEmbeddingStatusCounts, resetInProgressEmbeddings } from '@embedding/repo';
+import { processCallbackPendingEmbeddings, processQueuedEmbeddings } from '@embedding/service';
 import { serve } from '@hono/node-server';
 import { config, logger } from '@lib';
 import { getPromptStatusCounts, resetInProgressPrompts } from '@prompt/repo';
@@ -14,11 +16,16 @@ try {
   process.exit(1);
 }
 
-// Reset any prompts stuck as in_progress from a previous unclean shutdown. Must happen before the
+// Reset any jobs stuck as in_progress from a previous unclean shutdown. Must happen before the
 // port opens, otherwise GET /prompt/get can report a stale in_progress during the startup window.
 await resetInProgressPrompts();
+await resetInProgressEmbeddings();
 const startupCounts = await getPromptStatusCounts();
-logger.info({ component: 'server', ...startupCounts }, 'DB status on startup');
+const startupEmbeddingCounts = config.embedding ? await getEmbeddingStatusCounts() : undefined;
+logger.info(
+  { component: 'server', ...startupCounts, ...(startupEmbeddingCounts && { embedding: startupEmbeddingCounts }) },
+  'DB status on startup'
+);
 
 const server = serve({
   fetch: app.fetch,
@@ -32,8 +39,14 @@ const { promise: workerDone, resolve: workerDoneResolve } = Promise.withResolver
 
 const workerThread = async () => {
   try {
-    // Independent of each other — a slow callback batch must not delay picking up queued prompts.
-    await Promise.all([processQueuedPrompts(), processCallbackPendingPrompts()]);
+    // Independent of each other — they touch disjoint tables, so a slow callback batch or a slow
+    // embedding run must not delay picking up queued prompts.
+    await Promise.all([
+      processQueuedPrompts(),
+      processCallbackPendingPrompts(),
+      processQueuedEmbeddings(),
+      processCallbackPendingEmbeddings()
+    ]);
   } catch (error) {
     logger.error({ component: 'server', error }, 'Worker thread error');
   }

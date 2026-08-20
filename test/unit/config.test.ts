@@ -1,3 +1,9 @@
+// A real .env file in the working directory (e.g. a developer's local `.env` for running the
+// server) must not leak into these tests: dotenv's `config()` populates any process.env key that
+// isn't already set, which silently undoes `withEnvironment`'s deletions and makes assertions like
+// "config.embedding is undefined when EMBEDDING_URL is unset" depend on the machine running them.
+vi.mock('dotenv', () => ({ config: vi.fn() }));
+
 import { withEnvironment } from '../helpers/environment';
 
 describe('config', () => {
@@ -11,12 +17,15 @@ describe('config', () => {
       log: { level: expect.any(String) },
       http: { port: expect.any(Number) },
       database: { filename: expect.any(String) },
-      openai: {
+      generative: {
         url: expect.any(String),
         model: expect.any(String),
-        key: expect.any(String),
+        key: expect.any(String)
+      },
+      upstream: {
         timeout: expect.any(Number),
-        maxRetryCount: expect.any(Number)
+        maxRetryCount: expect.any(Number),
+        modelCacheTtlMs: expect.any(Number)
       },
       worker: { concurrency: expect.any(Number) }
     });
@@ -41,42 +50,51 @@ describe('config', () => {
     });
   });
 
-  it('reads OPENAI_TIMEOUT from the environment', async () => {
-    await withEnvironment({ OPENAI_TIMEOUT: '30000' }, async () => {
+  it('reads UPSTREAM_TIMEOUT from the environment', async () => {
+    await withEnvironment({ UPSTREAM_TIMEOUT: '30000' }, async () => {
       const { config } = await import('../../src/lib/config');
-      expect(config.openai.timeout).toBe(30_000);
+      expect(config.upstream.timeout).toBe(30_000);
     });
   });
 
-  it('rejects OPENAI_TIMEOUT below 100', async () => {
-    await withEnvironment({ OPENAI_TIMEOUT: '99' }, async () => {
-      await expect(import('../../src/lib/config')).rejects.toThrow('OPENAI_TIMEOUT must be at least 100');
+  it('rejects UPSTREAM_TIMEOUT below 100', async () => {
+    await withEnvironment({ UPSTREAM_TIMEOUT: '99' }, async () => {
+      await expect(import('../../src/lib/config')).rejects.toThrow('UPSTREAM_TIMEOUT must be at least 100');
     });
   });
 
-  it('rejects OPENAI_TIMEOUT=0', async () => {
-    await withEnvironment({ OPENAI_TIMEOUT: '0' }, async () => {
-      await expect(import('../../src/lib/config')).rejects.toThrow('OPENAI_TIMEOUT must be at least 100');
+  it('rejects UPSTREAM_TIMEOUT=0', async () => {
+    await withEnvironment({ UPSTREAM_TIMEOUT: '0' }, async () => {
+      await expect(import('../../src/lib/config')).rejects.toThrow('UPSTREAM_TIMEOUT must be at least 100');
     });
   });
 
-  it('reads OPENAI_MAX_RETRY_COUNT from the environment', async () => {
-    await withEnvironment({ OPENAI_MAX_RETRY_COUNT: '5' }, async () => {
+  it('reads UPSTREAM_MAX_RETRY_COUNT from the environment', async () => {
+    await withEnvironment({ UPSTREAM_MAX_RETRY_COUNT: '5' }, async () => {
       const { config } = await import('../../src/lib/config');
-      expect(config.openai.maxRetryCount).toBe(5);
+      expect(config.upstream.maxRetryCount).toBe(5);
     });
   });
 
-  it('accepts OPENAI_MAX_RETRY_COUNT=0', async () => {
-    await withEnvironment({ OPENAI_MAX_RETRY_COUNT: '0' }, async () => {
+  it('accepts UPSTREAM_MAX_RETRY_COUNT=0', async () => {
+    await withEnvironment({ UPSTREAM_MAX_RETRY_COUNT: '0' }, async () => {
       const { config } = await import('../../src/lib/config');
-      expect(config.openai.maxRetryCount).toBe(0);
+      expect(config.upstream.maxRetryCount).toBe(0);
     });
   });
 
-  it('rejects negative OPENAI_MAX_RETRY_COUNT', async () => {
-    await withEnvironment({ OPENAI_MAX_RETRY_COUNT: '-1' }, async () => {
-      await expect(import('../../src/lib/config')).rejects.toThrow('OPENAI_MAX_RETRY_COUNT must be at least 0');
+  it('rejects negative UPSTREAM_MAX_RETRY_COUNT', async () => {
+    await withEnvironment({ UPSTREAM_MAX_RETRY_COUNT: '-1' }, async () => {
+      await expect(import('../../src/lib/config')).rejects.toThrow('UPSTREAM_MAX_RETRY_COUNT must be at least 0');
+    });
+  });
+
+  // The rename to GENERATIVE_*/UPSTREAM_* is deliberately hard: an old OPENAI_* value must not be
+  // read, and the failure is silent (the default wins), so it is pinned by a test.
+  it('ignores the pre-2.0 OPENAI_URL and falls back to the GENERATIVE_URL default', async () => {
+    await withEnvironment({ OPENAI_URL: 'http://stale-host:9999/v1', GENERATIVE_URL: undefined }, async () => {
+      const { config } = await import('../../src/lib/config');
+      expect(config.generative.url).toBe('http://localhost:8080/v1');
     });
   });
 
@@ -94,16 +112,122 @@ describe('config', () => {
     });
   });
 
-  it('rejects invalid OPENAI_URL', async () => {
-    await withEnvironment({ OPENAI_URL: 'not-a-url' }, async () => {
+  it('rejects invalid GENERATIVE_URL', async () => {
+    await withEnvironment({ GENERATIVE_URL: 'not-a-url' }, async () => {
       await expect(import('../../src/lib/config')).rejects.toThrow();
     });
   });
 
-  it('accepts a valid OPENAI_URL', async () => {
-    await withEnvironment({ OPENAI_URL: 'http://my-llm-server:8080/v1' }, async () => {
+  it('accepts a valid GENERATIVE_URL', async () => {
+    await withEnvironment({ GENERATIVE_URL: 'http://my-llm-server:8080/v1' }, async () => {
       const { config } = await import('../../src/lib/config');
-      expect(config.openai.url).toBe('http://my-llm-server:8080/v1');
+      expect(config.generative.url).toBe('http://my-llm-server:8080/v1');
+    });
+  });
+
+  describe('GENERATIVE_CONTEXTSIZE', () => {
+    it('leaves generative.contextSize undefined when unset', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: undefined }, async () => {
+        const { config } = await import('../../src/lib/config');
+        expect(config.generative.contextSize).toBeUndefined();
+      });
+    });
+
+    it('parses GENERATIVE_CONTEXTSIZE from the environment', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: '8192' }, async () => {
+        const { config } = await import('../../src/lib/config');
+        expect(config.generative.contextSize).toBe(8192);
+      });
+    });
+
+    it('rejects GENERATIVE_CONTEXTSIZE=0', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: '0' }, async () => {
+        await expect(import('../../src/lib/config')).rejects.toThrow('GENERATIVE_CONTEXTSIZE must be at least 1');
+      });
+    });
+
+    it('rejects a non-numeric GENERATIVE_CONTEXTSIZE', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: 'not-a-number' }, async () => {
+        await expect(import('../../src/lib/config')).rejects.toThrow();
+      });
+    });
+  });
+
+  describe('embedding', () => {
+    it('leaves config.embedding undefined when EMBEDDING_URL is unset', async () => {
+      await withEnvironment({ EMBEDDING_URL: undefined }, async () => {
+        const { config } = await import('../../src/lib/config');
+        expect(config.embedding).toBeUndefined();
+      });
+    });
+
+    it('leaves config.embedding undefined when EMBEDDING_URL is empty', async () => {
+      await withEnvironment({ EMBEDDING_URL: '' }, async () => {
+        const { config } = await import('../../src/lib/config');
+        expect(config.embedding).toBeUndefined();
+      });
+    });
+
+    it('populates config.embedding when EMBEDDING_URL is set', async () => {
+      await withEnvironment(
+        { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_MODEL: 'embed-model', EMBEDDING_KEY: 'secret' },
+        async () => {
+          const { config } = await import('../../src/lib/config');
+          expect(config.embedding).toEqual({
+            url: 'http://localhost:8081/v1',
+            model: 'embed-model',
+            key: 'secret'
+          });
+        }
+      );
+    });
+
+    it('defaults model to empty and key to none', async () => {
+      await withEnvironment(
+        { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_MODEL: undefined, EMBEDDING_KEY: undefined },
+        async () => {
+          const { config } = await import('../../src/lib/config');
+          expect(config.embedding?.model).toBe('');
+          expect(config.embedding?.key).toBe('none');
+        }
+      );
+    });
+
+    it('rejects an invalid EMBEDDING_URL', async () => {
+      await withEnvironment({ EMBEDDING_URL: 'not-a-url' }, async () => {
+        await expect(import('../../src/lib/config')).rejects.toThrow();
+      });
+    });
+
+    describe('EMBEDDING_CONTEXTSIZE', () => {
+      it('leaves embedding.contextSize undefined when unset', async () => {
+        await withEnvironment(
+          { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_CONTEXTSIZE: undefined },
+          async () => {
+            const { config } = await import('../../src/lib/config');
+            expect(config.embedding?.contextSize).toBeUndefined();
+          }
+        );
+      });
+
+      it('parses EMBEDDING_CONTEXTSIZE from the environment', async () => {
+        await withEnvironment(
+          { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_CONTEXTSIZE: '4096' },
+          async () => {
+            const { config } = await import('../../src/lib/config');
+            expect(config.embedding?.contextSize).toBe(4096);
+          }
+        );
+      });
+
+      it('rejects a non-numeric EMBEDDING_CONTEXTSIZE', async () => {
+        await withEnvironment(
+          { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_CONTEXTSIZE: 'not-a-number' },
+          async () => {
+            await expect(import('../../src/lib/config')).rejects.toThrow();
+          }
+        );
+      });
     });
   });
 

@@ -14,10 +14,10 @@ import { RelayChatRequestSchema } from './schemas';
 type StreamingApiType = Parameters<Parameters<typeof stream>[1]>[0];
 
 const CHAT_METRICS: UpstreamMetricsSpec = {
-  counter: { name: 'openai_chat_requests_total', help: 'Total OpenAI chat completion streaming requests' },
+  counter: { name: 'generative_chat_requests_total', help: 'Total generative chat completion streaming requests' },
   histogram: {
-    name: 'openai_chat_request_duration_seconds',
-    help: 'OpenAI chat completion streaming duration in seconds'
+    name: 'generative_chat_request_duration_seconds',
+    help: 'Generative chat completion streaming duration in seconds'
   }
 };
 

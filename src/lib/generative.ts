@@ -1,11 +1,10 @@
-import path from 'node:path';
-
 import OpenAI from 'openai';
-import type { ChatCompletionChunk, ChatCompletionMessageParam } from 'openai/resources';
+import type { ChatCompletionChunk, ChatCompletionMessageParam, ReasoningEffort } from 'openai/resources';
 
 import type { RelayMessage, RelayTool } from './chatSchemas';
 import { config } from './config';
 import { logger } from './logger';
+import { createModelResolver } from './modelInfo';
 
 // Types — the upstream chunk shape plus the reasoning_content field OpenAI-compatible backends add.
 type RelayDelta = ChatCompletionChunk.Choice.Delta & {
@@ -21,71 +20,25 @@ type RelayChunk = Omit<ChatCompletionChunk, 'choices'> & {
 };
 
 const openai = new OpenAI({
-  baseURL: config.openai.url,
-  apiKey: config.openai.key,
-  timeout: config.openai.timeout
+  baseURL: config.generative.url,
+  apiKey: config.generative.key,
+  timeout: config.upstream.timeout
 });
 
-export type ModelInfo = { model: string; contextSize: number | undefined };
+const resolver = createModelResolver('generative', () => config.generative);
 
-// Deliberately short and decoupled from config.openai.timeout so /health fails fast even when
-// the configured completion timeout is long.
-const HEALTH_CHECK_TIMEOUT_MS = 5000;
+export const getGenerativeModelInfo = resolver.getModelInfo;
+export const checkGenerative = resolver.check;
 
-let resolvedModelInfoPromise: Promise<ModelInfo> | undefined;
-let resolvedAt = 0;
-
-export const getModelInfo = (): Promise<ModelInfo> => {
-  if (resolvedModelInfoPromise && Date.now() - resolvedAt > config.openai.modelCacheTtlMs)
-    resolvedModelInfoPromise = undefined;
-
-  if (!resolvedModelInfoPromise) {
-    // Stamped here rather than only after the fetch resolves: while the request is in flight the TTL
-    // check above must not consider the cache stale, or every concurrent caller would discard the
-    // in-flight promise and fire its own /models request. Re-stamped on success below so the TTL
-    // window measures from the resolved value.
-    resolvedAt = Date.now();
-    resolvedModelInfoPromise = (async () => {
-      const requestedModel = config.openai.model;
-      const response = await fetch(`${config.openai.url}/models`, {
-        headers: { Authorization: `Bearer ${config.openai.key}` },
-        signal: AbortSignal.timeout(config.openai.timeout)
-      });
-      if (!response.ok) throw new Error(`Models endpoint returned HTTP ${response.status}`);
-      const json = (await response.json()) as { data: Array<{ id: string; meta?: { n_ctx?: number } }> };
-      const entry = requestedModel ? json.data.find((m) => m.id === requestedModel) : json.data[0];
-      if (!entry) throw new Error('No models found' + (requestedModel ? ` with id ${requestedModel}` : ''));
-      const contextSize = entry.meta?.n_ctx;
-      const model = path.basename(entry.id);
-      logger.info({ component: 'openai', model, contextSize }, 'Using model');
-      resolvedAt = Date.now();
-      return { model, contextSize };
-    })().catch((error: unknown) => {
-      resolvedModelInfoPromise = undefined;
-      throw error;
-    });
-  }
-
-  return resolvedModelInfoPromise;
-};
+// Spread into every completion request. 'default' means "say nothing and let the backend decide";
+// any other value is sent verbatim. See config.reasoning.effort for why the default is 'none'.
+const reasoningParameters = (): { reasoning_effort?: ReasoningEffort } =>
+  config.reasoning.effort === 'default' ? {} : { reasoning_effort: config.reasoning.effort };
 
 const resolveModel = async (): Promise<string> => {
-  const info = await getModelInfo();
+  const info = await getGenerativeModelInfo();
   return info.model;
 };
-
-export async function checkOpenAI(): Promise<{ ok: boolean; error?: string }> {
-  let response: Response;
-  try {
-    response = await fetch(`${config.openai.url}/models`, {
-      headers: { Authorization: `Bearer ${config.openai.key}` },
-      signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS)
-    });
-  } catch (error) {
-    return { ok: false, error: String(error) };
-  }
-  return response.ok ? { ok: true } : { ok: false, error: `HTTP ${response.status}` };
-}
 
 export const streamChatCompletion = async function* (
   messages: RelayMessage[],
@@ -100,6 +53,7 @@ export const streamChatCompletion = async function* (
       messages: messages as unknown as ChatCompletionMessageParam[],
       tools,
       ...(temperature !== undefined && { temperature }),
+      ...reasoningParameters(),
       stream: true
     },
     { signal }
@@ -108,7 +62,7 @@ export const streamChatCompletion = async function* (
   for await (const chunk of completion) yield chunk;
 };
 
-export const executeOpenAIPrompt = async (
+export const executeGenerativePrompt = async (
   prompt: { system: string | null | undefined; user: string },
   temperature: number
 ): Promise<{
@@ -125,7 +79,7 @@ export const executeOpenAIPrompt = async (
 
   logger.info(
     {
-      component: 'openai',
+      component: 'generative',
       sizes: { system: prompt.system?.length, user: prompt.user.length },
       system: prompt.system?.slice(0, 100),
       user: prompt.user.slice(0, 100)
@@ -141,6 +95,7 @@ export const executeOpenAIPrompt = async (
         ]
       : [{ role: 'user', content: prompt.user }],
     temperature,
+    ...reasoningParameters(),
     stream: true
   })) as unknown as AsyncIterable<RelayChunk>;
 
@@ -194,6 +149,8 @@ export const executeOpenAIPrompt = async (
     responseTimeMs,
     responseTokenPerSecond: responseTimeMs > 0 ? Math.round(responseToken / (responseTimeMs / 1000)) : 0
   };
-  logger.info({ component: 'openai', model, ...timing }, 'Upstream completion finished');
+  logger.info({ component: 'generative', model, ...timing }, 'Upstream completion finished');
   return { reasoning, response, timing };
 };
+
+export { type ModelInfo } from './modelInfo';
