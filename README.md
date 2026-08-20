@@ -235,6 +235,7 @@ Returns queue counts and server uptime, split into a `generative` block (always 
 {
   "version": "2.0.0",
   "uptime": 42,
+  "workerConcurrency": 1,
   "generative": {
     "model": "llama-3.2",
     "contextSize": 131072,
@@ -272,6 +273,7 @@ const ModelQueueSummary = z.object({
 const StatusResponse = z.object({
   version: z.string(),
   uptime: z.number(),
+  workerConcurrency: z.number(),
   generative: ModelQueueSummary,
   embedding: ModelQueueSummary.optional()
 });

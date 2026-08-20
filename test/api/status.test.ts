@@ -9,7 +9,7 @@ vi.mock('../../src/embedding/repo', () => ({
 vi.mock('@lib', () => ({
   getGenerativeModelInfo: vi.fn(),
   getEmbeddingModelInfo: vi.fn(),
-  config: { embedding: undefined }
+  config: { embedding: undefined, worker: { concurrency: 4 } }
 }));
 
 import { config, getEmbeddingModelInfo, getGenerativeModelInfo } from '@lib';
@@ -46,6 +46,7 @@ describe('GET /status', () => {
     expect(body).toHaveProperty('version');
     expect(body).toHaveProperty('uptime');
     expect(typeof body.uptime).toBe('number');
+    expect(body.workerConcurrency).toBe(4);
     expect(body.generative.model).toBe('test-model');
     expect(body.generative.contextSize).toBe(32_768);
   });

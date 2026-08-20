@@ -24,6 +24,7 @@ export const status = new Hono().get('/', async (c) => {
   return c.json({
     version,
     uptime: Math.floor(process.uptime()),
+    workerConcurrency: config.worker.concurrency,
     generative,
     // Omitted entirely when no embedding backend is configured.
     ...(embedding && { embedding })

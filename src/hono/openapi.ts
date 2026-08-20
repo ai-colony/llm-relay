@@ -368,13 +368,14 @@ const spec = {
         properties: {
           version: { type: 'string' },
           uptime: { type: 'integer', description: 'Process uptime in seconds' },
+          workerConcurrency: { type: 'integer', description: 'Configured WORKER_CONCURRENCY' },
           generative: reference('ModelQueueSummary'),
           embedding: {
             ...reference('ModelQueueSummary'),
             description: 'Present only when an embedding backend is configured'
           }
         },
-        required: ['version', 'uptime', 'generative']
+        required: ['version', 'uptime', 'workerConcurrency', 'generative']
       },
       ModelQueueSummary: {
         type: 'object',
