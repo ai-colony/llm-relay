@@ -50,6 +50,28 @@ cp .env.example .env   # then edit .env
 | `CALLBACK_RETRY_TTL_HOURS`         | `24`                       | Callbacks that have been pending for longer than this many hours are skipped and not retried again.                                                                                                                        |
 | `CALLBACK_HMAC_SECRET`             | _(empty)_                  | When set, each callback POST includes `X-LLM-Relay-Signature: hmac-sha256=<hex>` computed over the body. Lets receivers verify authenticity.                                                                               |
 
+### Using a hosted backend (e.g. Scaleway)
+
+`GENERATIVE_URL`/`EMBEDDING_URL` don't have to point at a local llama-server — any OpenAI-compatible host
+works, including hosted providers like [Scaleway Generative APIs](https://www.scaleway.com/en/generative-apis/).
+A few things to watch for when doing that:
+
+- The URL is org-scoped: in `https://api.scaleway.ai/4581a652-XXXX-XXXX-XXXX-XXXXXXXXXXXX/v1`, the
+  `4581a652-...` segment is _your_ Scaleway organization ID, not a shared constant — copy it from your own
+  console.
+- Don't forget the `s` in `https://` — plain `http://` to a hosted API will just fail to connect.
+- Set `GENERATIVE_KEY`/`EMBEDDING_KEY` to your provider API key; the `none` default only works for
+  unauthenticated local servers.
+- Set `GENERATIVE_MODEL`/`EMBEDDING_MODEL` explicitly — don't leave them empty. Empty only works against a
+  backend serving a single model (e.g. one llama-server instance); a multi-model host needs the exact
+  model id, matched verbatim against that backend's `GET /models` list.
+- Raise `UPSTREAM_TIMEOUT` if requests start timing out — a network round trip to a hosted API is slower
+  than a local backend, especially for large `max_tokens` generations.
+- You can leave `EMBEDDING_URL` empty if you don't need embeddings — it stays fully optional regardless of
+  where `GENERATIVE_URL` points.
+- After changing any of these, check `GET /health` and `GET /status` to confirm the relay can actually
+  reach the new backend and resolve the configured model before relying on it.
+
 ## Running
 
 ```bash
