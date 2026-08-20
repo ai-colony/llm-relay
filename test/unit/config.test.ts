@@ -125,6 +125,34 @@ describe('config', () => {
     });
   });
 
+  describe('GENERATIVE_CONTEXTSIZE', () => {
+    it('leaves generative.contextSize undefined when unset', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: undefined }, async () => {
+        const { config } = await import('../../src/lib/config');
+        expect(config.generative.contextSize).toBeUndefined();
+      });
+    });
+
+    it('parses GENERATIVE_CONTEXTSIZE from the environment', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: '8192' }, async () => {
+        const { config } = await import('../../src/lib/config');
+        expect(config.generative.contextSize).toBe(8192);
+      });
+    });
+
+    it('rejects GENERATIVE_CONTEXTSIZE=0', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: '0' }, async () => {
+        await expect(import('../../src/lib/config')).rejects.toThrow('GENERATIVE_CONTEXTSIZE must be at least 1');
+      });
+    });
+
+    it('rejects a non-numeric GENERATIVE_CONTEXTSIZE', async () => {
+      await withEnvironment({ GENERATIVE_CONTEXTSIZE: 'not-a-number' }, async () => {
+        await expect(import('../../src/lib/config')).rejects.toThrow();
+      });
+    });
+  });
+
   describe('embedding', () => {
     it('leaves config.embedding undefined when EMBEDDING_URL is unset', async () => {
       await withEnvironment({ EMBEDDING_URL: undefined }, async () => {
@@ -168,6 +196,37 @@ describe('config', () => {
     it('rejects an invalid EMBEDDING_URL', async () => {
       await withEnvironment({ EMBEDDING_URL: 'not-a-url' }, async () => {
         await expect(import('../../src/lib/config')).rejects.toThrow();
+      });
+    });
+
+    describe('EMBEDDING_CONTEXTSIZE', () => {
+      it('leaves embedding.contextSize undefined when unset', async () => {
+        await withEnvironment(
+          { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_CONTEXTSIZE: undefined },
+          async () => {
+            const { config } = await import('../../src/lib/config');
+            expect(config.embedding?.contextSize).toBeUndefined();
+          }
+        );
+      });
+
+      it('parses EMBEDDING_CONTEXTSIZE from the environment', async () => {
+        await withEnvironment(
+          { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_CONTEXTSIZE: '4096' },
+          async () => {
+            const { config } = await import('../../src/lib/config');
+            expect(config.embedding?.contextSize).toBe(4096);
+          }
+        );
+      });
+
+      it('rejects a non-numeric EMBEDDING_CONTEXTSIZE', async () => {
+        await withEnvironment(
+          { EMBEDDING_URL: 'http://localhost:8081/v1', EMBEDDING_CONTEXTSIZE: 'not-a-number' },
+          async () => {
+            await expect(import('../../src/lib/config')).rejects.toThrow();
+          }
+        );
       });
     });
   });

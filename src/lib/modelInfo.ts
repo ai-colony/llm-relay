@@ -5,7 +5,7 @@ import { logger } from './logger';
 
 export type ModelInfo = { model: string; contextSize: number | undefined };
 
-export type UpstreamConfig = { url: string; model: string; key: string };
+export type UpstreamConfig = { url: string; model: string; key: string; contextSize?: number };
 
 export type ModelResolver = {
   getModelInfo: () => Promise<ModelInfo>;
@@ -33,7 +33,7 @@ export const createModelResolver = (component: string, getConfig: () => Upstream
       // window measures from the resolved value.
       resolvedAt = Date.now();
       resolvedModelInfoPromise = (async () => {
-        const { url, model: requestedModel, key } = getConfig();
+        const { url, model: requestedModel, key, contextSize: configuredContextSize } = getConfig();
         const response = await fetch(`${url}/models`, {
           headers: { Authorization: `Bearer ${key}` },
           signal: AbortSignal.timeout(config.upstream.timeout)
@@ -42,7 +42,9 @@ export const createModelResolver = (component: string, getConfig: () => Upstream
         const json = (await response.json()) as { data: Array<{ id: string; meta?: { n_ctx?: number } }> };
         const entry = requestedModel ? json.data.find((m) => m.id === requestedModel) : json.data[0];
         if (!entry) throw new Error('No models found' + (requestedModel ? ` with id ${requestedModel}` : ''));
-        const contextSize = entry.meta?.n_ctx;
+        // Live value from the backend wins; the configured value is only a fallback for upstreams
+        // whose /models response carries no meta.n_ctx at all (e.g. Scaleway).
+        const contextSize = entry.meta?.n_ctx ?? configuredContextSize;
         const model = path.basename(entry.id);
         logger.info({ component, model, contextSize }, 'Using model');
         resolvedAt = Date.now();

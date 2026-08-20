@@ -42,6 +42,8 @@ cp .env.example .env   # then edit .env
 | `EMBEDDING_URL`                    | _(empty)_                  | Base URL of an optional second, embedding-only backend. **Leave empty to disable embedding support entirely** — `/embedding/*` then answers `503` and `/health` ignores it.                                                |
 | `EMBEDDING_MODEL`                  | _(first available model)_  | Embedding model name; if empty, the first model from that backend's `/models` is used                                                                                                                                      |
 | `EMBEDDING_KEY`                    | `none`                     | API key for the embedding backend                                                                                                                                                                                          |
+| `GENERATIVE_CONTEXTSIZE`           | _(empty)_                  | Manual fallback context size for the generative upstream, reported via `GET /status`. Only used when that upstream's `/models` response doesn't provide one itself (e.g. Scaleway) — a live value always takes priority.   |
+| `EMBEDDING_CONTEXTSIZE`            | _(empty)_                  | Same fallback as `GENERATIVE_CONTEXTSIZE`, for the embedding upstream.                                                                                                                                                     |
 | `UPSTREAM_TIMEOUT`                 | `10000`                    | Per-request timeout in milliseconds, for both backends                                                                                                                                                                     |
 | `UPSTREAM_MAX_RETRY_COUNT`         | `10`                       | Maximum number of transient-error retries before a job is permanently failed with `statusError: "max_retries_exceeded"`                                                                                                    |
 | `UPSTREAM_MODEL_CACHE_TTL_SECONDS` | `60`                       | How often (in seconds) to re-check each upstream's `/models` endpoint for the active model name and context size, so a backend restart with a different model is picked up without restarting the relay.                   |
@@ -71,6 +73,9 @@ A few things to watch for when doing that:
   where `GENERATIVE_URL` points.
 - After changing any of these, check `GET /health` and `GET /status` to confirm the relay can actually
   reach the new backend and resolve the configured model before relying on it.
+- If `GET /status` shows `contextSize: null` for a hosted backend, that provider's `/models` response
+  simply doesn't report one (llama.cpp does via a `meta.n_ctx` extension; most hosted APIs don't). Set
+  `GENERATIVE_CONTEXTSIZE`/`EMBEDDING_CONTEXTSIZE` to report a known value instead — see `.env.example`.
 
 ## Running
 

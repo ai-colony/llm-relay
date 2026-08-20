@@ -6,10 +6,10 @@ function makeOpenAIMock() {
   };
 }
 
-function makeConfigMock(model: string, modelCacheTtlMs = 60_000) {
+function makeConfigMock(model: string, modelCacheTtlMs = 60_000, contextSize?: number) {
   return {
     config: {
-      generative: { url: 'http://test/v1', model, key: 'k' },
+      generative: { url: 'http://test/v1', model, key: 'k', contextSize },
       embedding: undefined,
       upstream: { timeout: 5000, maxRetryCount: 10, modelCacheTtlMs },
       log: { level: 'silent' },
@@ -359,6 +359,32 @@ describe('resolveModel / getGenerativeModelInfo', () => {
     const info = await getGenerativeModelInfo();
 
     expect(info.contextSize).toBeUndefined();
+  });
+
+  it('falls back to config.generative.contextSize when meta.n_ctx is absent', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model', 60_000, 4096));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'test-model' }]));
+
+    const { getGenerativeModelInfo } = await import('../../src/lib/generative');
+    const info = await getGenerativeModelInfo();
+
+    expect(info.contextSize).toBe(4096);
+  });
+
+  it('prefers the live meta.n_ctx over a configured contextSize when both are present', async () => {
+    vi.doMock('openai', makeOpenAIMock);
+    vi.doMock('../../src/lib/config', () => makeConfigMock('test-model', 60_000, 4096));
+    vi.doMock('../../src/lib/logger', makeLoggerMock);
+
+    vi.stubGlobal('fetch', makeModelsFetch([{ id: 'test-model', meta: { n_ctx: 32_768 } }]));
+
+    const { getGenerativeModelInfo } = await import('../../src/lib/generative');
+    const info = await getGenerativeModelInfo();
+
+    expect(info.contextSize).toBe(32_768);
   });
 
   it('re-resolves the model once the cache TTL has elapsed', async () => {
